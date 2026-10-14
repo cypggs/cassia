@@ -1,0 +1,16 @@
+packages:
+  - 'shared'
+  - 'agent-runtime'
+  - 'socket-server'
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+allowBuilds:
+  esbuild: true
+  sharp: true
+  # 明确忽略：node-pty 自带 prebuilds（darwin/win32），linux 端走沙箱镜像里的
+  # npm+node-gyp（Dockerfile 单独装），不经过 pnpm；genai/protobufjs 的
+  # postinstall 非必需。写 false 免得 pnpm 11 每次 install 都报警告。
+  '@google/genai': false
+  node-pty: false
+  protobufjs: false

@@ -1,0 +1,16 @@
+[Unit]
+Description=Cassia socket-server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/cassia/socket-server
+EnvironmentFile=/home/ubuntu/cassia/.env.production
+ExecStart=/usr/local/bin/node --import tsx src/index.ts
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

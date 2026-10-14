@@ -1,0 +1,24 @@
+# Cassia all-in-one 部署：单域名同时服务前端与控制面。
+#
+# 用法：把 YOUR_DOMAIN 换成你的域名。Caddy 会自动申请 Let's Encrypt 证书。
+#
+# 路由约定（与前端 lib/authToken.ts 的 SOCKET_URL 配合）：
+#   /socket.io/*  → socket-server :4000（事件流）
+#   /sessions/*   → socket-server :4000（文件上传/下载）
+#   其余          → Next.js :3000
+# 前端构建时把 NEXT_PUBLIC_SOCKET_URL 设成 https://YOUR_DOMAIN 即可同域直连。
+
+YOUR_DOMAIN {
+
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:4000
+	}
+
+	handle /sessions/* {
+		reverse_proxy 127.0.0.1:4000
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

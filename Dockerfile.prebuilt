@@ -1,0 +1,16 @@
+# 生产 VM 用的「免构建」镜像：node_modules 在部署机上按 linux/x64 预装
+# （scripts/deploy-vm.sh 负责），VM 上只做 COPY —— 那台 985MB 内存的
+# 小盒子在容器里跑 pnpm install 会把它拖死。
+# 完整构建版见根目录 Dockerfile（内存充足的机器用那个）。
+FROM node:22-bookworm-slim
+WORKDIR /app
+COPY . /app
+
+ENV SOCKET_PORT=4000
+EXPOSE 4000
+# SQLite 数据落卷：docker run -v cassia-data:/data，DB_PATH=/data/cassia.db
+VOLUME /data
+# 直接用 node 跑 tsx（socket-server 自己的 node_modules 里有 tsx），
+# 运行时不依赖 corepack/pnpm。
+WORKDIR /app/socket-server
+CMD ["node", "--import", "tsx", "src/index.ts"]

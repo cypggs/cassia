@@ -1,0 +1,17 @@
+[Unit]
+Description=Cassia web (Next.js)
+After=network.target cassia-socket.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/cassia
+EnvironmentFile=/home/ubuntu/cassia/.env.production
+ExecStart=/usr/local/bin/node_modules/.bin/next start -p 3000
+# 若用 pnpm 全局安装：ExecStart=/home/ubuntu/.local/share/pnpm/next start -p 3000
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

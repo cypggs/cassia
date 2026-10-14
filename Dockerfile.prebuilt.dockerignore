@@ -1,0 +1,9 @@
+# Dockerfile.prebuilt 的上下文里 node_modules 是主角（本机预装的 linux/x64
+# 依赖），绝不能排除。只剔密钥和版本控制。
+.git
+.insforge
+.env
+.env.*
+.next
+.workspace
+*.tsbuildinfo

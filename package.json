@@ -1,0 +1,50 @@
+{
+  "name": "cassia",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n web,socket -c cyan,magenta \"next dev -p 3000\" \"pnpm -F @cassia/socket-server dev\"",
+    "dev:web": "next dev -p 3000",
+    "dev:socket": "pnpm -F @cassia/socket-server dev",
+    "dev:runtime": "pnpm -F @cassia/agent-runtime dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:isolation": "node scripts/e2e-isolation.mjs",
+    "test:persistence": "node scripts/e2e-persistence.mjs",
+    "test:dormancy": "node scripts/e2e-dormancy.mjs",
+    "test:files": "node scripts/e2e-files.mjs",
+    "test:upload": "node scripts/e2e-upload.mjs",
+    "test:plan": "node scripts/e2e-plan.mjs",
+    "test:shell": "node scripts/e2e-shell.mjs",
+    "test:chaos": "node --env-file=.env scripts/e2e-chaos.mjs",
+    "bump-pi": "node scripts/bump-pi.mjs",
+    "test:auth": "node --env-file=.env scripts/e2e-auth.mjs",
+    "test:auth:pg": "node --env-file=.env scripts/e2e-auth-pg.mjs",
+    "test:credits": "node --env-file=.env scripts/e2e-credits.mjs",
+    "test:credits:pg": "node --env-file=.env scripts/e2e-credits-pg.mjs"
+  },
+  "dependencies": {
+    "@cassia/shared": "workspace:*",
+    "@insforge/sdk": "^1.5.2",
+    "@novnc/novnc": "^1.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "next": "^15.5.22",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "^10.0.4",
+    "e2b": "^2.36.0",
+    "typescript": "^5.9.3",
+    "ws": "^8.21.1"
+  }
+}

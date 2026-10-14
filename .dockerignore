@@ -1,0 +1,19 @@
+node_modules
+**/node_modules
+.next
+.workspace
+.git
+.insforge
+.env
+.env.*
+*.tsbuildinfo
+# socket-server 镜像只需要根清单 + shared/ + socket-server/
+sandbox-lite
+sandbox-desktop
+agent-runtime
+app
+components
+lib
+scripts
+docs
+deploy
