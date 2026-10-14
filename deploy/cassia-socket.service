@@ -5,9 +5,10 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/cassia/socket-server
+WorkingDirectory=/home/ubuntu/cassia
 EnvironmentFile=/home/ubuntu/cassia/.env.production
-ExecStart=/usr/local/bin/node --import tsx src/index.ts
+# pnpm --filter 走 workspace 脚本（tsx src/index.ts），不依赖 node 具体安装路径
+ExecStart=/usr/bin/env pnpm --filter @cassia/socket-server start
 Restart=always
 RestartSec=3
 LimitNOFILE=65536
