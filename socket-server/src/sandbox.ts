@@ -160,7 +160,12 @@ async function provisionE2B(opts: { model: string; sessionId: string }): Promise
     Sandbox.create(template, {
       timeoutMs,
       // 只放非敏感的运行参数。密钥走 attach，理由见文件头。
-      envs: { PI_MODEL: opts.model },
+      // PI_PROVIDER 必须显式透进去：pi 0.87 不会从 deepseek/xxx 的 model
+      // 字符串反推 provider（会错去 openrouter 找 key），见 README。
+      envs: {
+        PI_MODEL: opts.model,
+        ...(process.env.PI_PROVIDER ? { PI_PROVIDER: process.env.PI_PROVIDER } : {}),
+      },
       // 归属标记：存储对账脚本（scripts/sandbox-storage-report.mjs）靠它
       // 认 sandbox → session 的映射，孤儿/超龄才敢直接 kill
       metadata: { app: 'cassia', sessionId: opts.sessionId },

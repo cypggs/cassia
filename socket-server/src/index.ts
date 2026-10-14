@@ -530,6 +530,9 @@ function pickApiKeys(): Record<string, string> {
     'OPENROUTER_API_KEY',
     'ZAI_API_KEY',
     'PI_API_KEY',
+    // 非密钥但 pi 强依赖：provider 必须显式指定，否则 deepseek/xxx
+    // 会被 pi 0.87 错配到 openrouter。随 attach 下发，和 key 同通道。
+    'PI_PROVIDER',
   ]) {
     const v = process.env[k]
     if (v) out[k] = v
