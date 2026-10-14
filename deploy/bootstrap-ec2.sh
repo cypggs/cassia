@@ -62,7 +62,7 @@ E2B_API_KEY=${E2B_API_KEY}
 DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
 # pi 0.87 不会从 deepseek/xxx 反推 provider，必须显式 PI_PROVIDER=deepseek
 #（否则去 openrouter 找 key 直接失败）。model 用裸 ID。
-PI_MODEL=deepseek-chat
+PI_MODEL=deepseek-flash
 PI_PROVIDER=deepseek
 E2B_TEMPLATE=${E2B_TEMPLATE}
 SOCKET_PORT=4000

@@ -90,7 +90,7 @@ E2B_API_KEY=e2b_...
 DEEPSEEK_API_KEY=sk-...
 # pi 0.87 的坑：model 写成 deepseek/xxx 它不会反推 provider，
 # 会去 openrouter 找 key。必须显式 PI_PROVIDER + 裸模型 ID。
-PI_MODEL=deepseek-chat
+PI_MODEL=deepseek-flash
 PI_PROVIDER=deepseek
 E2B_TEMPLATE=cassia-lite        # 你构建的模板名
 NEXT_PUBLIC_SOCKET_URL=https://your-domain.com
