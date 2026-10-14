@@ -19,7 +19,7 @@ E2B_API_KEY="${E2B_API_KEY:?E2B_API_KEY 未设置}"
 DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY 未设置}"
 PUBLIC_IP="${PUBLIC_IP:?PUBLIC_IP 未设置}"
 # 要用的 E2B 模板（默认 cassia-lite；若刚构建好还没 ready，可先用已有的模板名）
-E2B_TEMPLATE="${E2B_TEMPLATE:-cassia-lite}"
+E2B_TEMPLATE="${E2B_TEMPLATE:-agentbox}"
 export E2B_API_KEY DEEPSEEK_API_KEY E2B_TEMPLATE
 
 # ── 0. swap：t3.small 只有 2GB，next build 需要兜底 ──

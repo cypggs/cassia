@@ -66,8 +66,9 @@ const NEKO_PORT = 8333
 /** 模板里烤死的 WORKSPACE（sandbox-desktop/lite 的 ENV），会话目录是它的子目录 */
 const E2B_WORKSPACE = '/home/user/workspace'
 
-/** 带画面通道的模板。lite 只有 runtime，没有 Xorg / x11vnc / neko。 */
-const SCREEN_TEMPLATES = new Set(['cassia'])
+/** 带画面通道的模板。lite 只有 runtime，没有 Xorg / x11vnc / neko。
+ * agentbox 是沿用原项目的完整桌面模板（Xorg + x11vnc + neko）。 */
+const SCREEN_TEMPLATES = new Set(['cassia', 'agentbox'])
 
 export async function provision(opts: { model: string; sessionId: string }): Promise<RuntimeHandle> {
   const local = process.env.AGENT_RUNTIME_URL
