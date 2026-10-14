@@ -18,7 +18,9 @@ set -x
 E2B_API_KEY="${E2B_API_KEY:?E2B_API_KEY 未设置}"
 DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY 未设置}"
 PUBLIC_IP="${PUBLIC_IP:?PUBLIC_IP 未设置}"
-export E2B_API_KEY DEEPSEEK_API_KEY
+# 要用的 E2B 模板（默认 cassia-lite；若刚构建好还没 ready，可先用已有的模板名）
+E2B_TEMPLATE="${E2B_TEMPLATE:-cassia-lite}"
+export E2B_API_KEY DEEPSEEK_API_KEY E2B_TEMPLATE
 
 # ── 0. swap：t3.small 只有 2GB，next build 需要兜底 ──
 if ! swapon --show | grep -q /swapfile; then
@@ -59,7 +61,7 @@ cat > /home/ubuntu/cassia/.env.production <<EOF
 E2B_API_KEY=${E2B_API_KEY}
 DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
 PI_MODEL=deepseek/deepseek-chat
-E2B_TEMPLATE=cassia-lite
+E2B_TEMPLATE=${E2B_TEMPLATE}
 SOCKET_PORT=4000
 NEXT_PUBLIC_SOCKET_URL=http://${PUBLIC_IP}
 NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
@@ -94,8 +96,10 @@ http://${PUBLIC_IP} {
 EOF
 systemctl reload caddy || systemctl restart caddy
 
-# ── 7. 后台构建 E2B 模板（约 10-20 分钟，不阻塞）──
-sudo -u ubuntu -E bash -c \
-  'cd /home/ubuntu/cassia && nohup ./sandbox-lite/build.sh > /home/ubuntu/template-build.log 2>&1 &'
+# ── 7. 后台构建 E2B 模板（约 10-20 分钟，不阻塞；用现成模板时跳过）──
+if [ "$E2B_TEMPLATE" = "cassia-lite" ]; then
+  sudo -u ubuntu -E bash -c \
+    'cd /home/ubuntu/cassia && nohup ./sandbox-lite/build.sh > /home/ubuntu/template-build.log 2>&1 &'
+fi
 
 echo "BOOTSTRAP_DONE $(date -u +%FT%TZ)"
