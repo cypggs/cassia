@@ -2,7 +2,8 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { nid } from '@cassia/shared'
 import type { AgentEvent, SessionSummary } from '@cassia/shared'
-import type { CreditOrder, LedgerEntry, Store, UsageCharge } from './store.js'
+import type { Store } from './store.js'
+import type { CreditOrder, LedgerEntry, UsageCharge } from './commercial/store.js'
 
 // node 每次加载 node:sqlite 都会打一条 ExperimentalWarning。
 // 它是我们刻意选的依赖（零外部包、随 node 走），不是意外 —— 压在源头，

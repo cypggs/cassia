@@ -3,7 +3,8 @@ import type { Server, Socket } from 'socket.io'
 import { verifyWebhook, WebhookEventType, type WebhookEventData } from '@waffo/pancake-ts'
 import { nid } from '@cassia/shared'
 import type { AgentEvent, UsageReportEvent } from '@cassia/shared'
-import type { Store } from '../store.js'
+import type { CoreStore } from '../store.js'
+import type { CommercialStore } from './store.js'
 import { authEnabled, verifyRequest, verifyToken, type AuthUser } from './auth.js'
 import {
   CODE_BUDGET_CAP,
@@ -29,7 +30,12 @@ import { createCheckout, packs, waffoEnabled } from './waffo.js'
 
 export interface CommercialDeps {
   io: Server
-  store: Store
+  /**
+   * 商业化能碰的存储面:积分/订单 + 会话属主(归属校验要用)。
+   * 事件流、会话 CRUD 这些核心能力不在这条依赖里 —— 边界即类型。
+   * 实现上就是同一个 Store 实例,这里收窄的是「看得见什么」。
+   */
+  store: CommercialStore & Pick<CoreStore, 'sessionOwner'>
   emit(sessionId: string, event: AgentEvent): void
   isAgentRunning(sessionId: string): boolean
   abortBridge(sessionId: string): void

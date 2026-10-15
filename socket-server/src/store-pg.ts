@@ -1,7 +1,8 @@
 import pg from 'pg'
 import { nid } from '@cassia/shared'
 import type { AgentEvent, SessionSummary } from '@cassia/shared'
-import type { CreditOrder, LedgerEntry, Store, UsageCharge } from './store.js'
+import type { Store } from './store.js'
+import type { CreditOrder, LedgerEntry, UsageCharge } from './commercial/store.js'
 
 /**
  * 生产存储：InsForge PostgreSQL（表结构见 migrations/20260804085907_cassia-core.sql）。

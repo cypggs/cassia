@@ -10,26 +10,13 @@ import type {
   SessionSummary,
 } from '@cassia/shared'
 import { SOCKET_URL, getSocketToken, authHeaders } from './commercial/authToken'
+import { useWallet } from './commercial/useWallet'
 import { useI18n } from './i18n'
 
 export { SOCKET_URL }
+export type { Wallet } from './commercial/useWallet'
 
 export type Attachment = NonNullable<ChatEvent['attachments']>[number]
-
-/** 钱包快照（get_wallet 的 ack）。null = 积分治理未启用（本地开发） */
-export interface Wallet {
-  balance: number
-  ledger: {
-    id: string
-    delta: number
-    reason: 'trial' | 'purchase' | 'usage' | 'adjust'
-    ref: string | null
-    balanceAfter: number
-    createdAt: number
-  }[]
-  packs: { key: string; amount: string; credits: number }[]
-  waffo: boolean
-}
 
 /**
  * 前端的全部状态都在这里。
@@ -48,10 +35,6 @@ export function useCassia() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const lastIdRef = useRef<string | undefined>(undefined)
-  /** 钱包。null = 未启用积分（开放模式） */
-  const [wallet, setWallet] = useState<Wallet | null>(null)
-  /** 充值弹框开关 —— 「积分不足」事件会自己把它顶开 */
-  const [rechargeOpen, setRechargeOpen] = useState(false)
   /** 会话加载失败计数（join ack null）—— 页面据此弹 toast 提示重试 */
   const [loadError, setLoadError] = useState(0)
 
@@ -67,8 +50,6 @@ export function useCassia() {
     s.on('connect', () => {
       setConnected(true)
       s.emit('list_sessions', {}, (list: SessionSummary[]) => setSessions(list))
-      // 积分治理未启用时 ack 是 null —— 钱包 UI 整个不出现
-      s.emit('get_wallet', {}, (w: Wallet | null) => setWallet(w))
       // 重连：带游标回来，服务端只补差集
       const sid = currentSessionRef.current
       if (sid) {
@@ -82,14 +63,8 @@ export function useCassia() {
       if (err.message === 'unauthorized') window.dispatchEvent(new Event('cassia:unauthorized'))
     })
     s.on('event', ({ sessionId: sid, event }: EventEnvelope) => {
-      // 积分被拦：顶开充值弹框（这条 statusUpdate 也照常进事件流，时间线留痕）
-      if (event.type === 'statusUpdate' && event.code === 'insufficient_credits') setRechargeOpen(true)
       if (sid !== currentSessionRef.current) return
       applyEvents([event])
-    })
-    // 扣费/入账后的余额推送（用户级房间，不属任何会话）
-    s.on('wallet_update', ({ balance }: { balance: number }) => {
-      setWallet((prev) => (prev ? { ...prev, balance } : prev))
     })
     // 会话被删（本端或其它端）：从列表抹掉；正好是当前会话就连视图一起清
     s.on('session_deleted', ({ sessionId: sid }: { sessionId: string }) => {
@@ -239,18 +214,10 @@ export function useCassia() {
     if (sid) socketRef.current?.emit('abort', { sessionId: sid })
   }, [])
 
-  /** 开收银台：ack 拿回托管页 URL，新标签打开（不离开工作台） */
-  const createCheckout = useCallback((pack: string): Promise<string | null> => {
-    return new Promise((resolve) => {
-      socketRef.current?.emit('create_checkout', { pack }, (r: { checkoutUrl: string } | null) => {
-        resolve(r?.checkoutUrl ?? null)
-      })
-    })
-  }, [])
-
-  const refreshWallet = useCallback(() => {
-    socketRef.current?.emit('get_wallet', {}, (w: Wallet | null) => setWallet(w))
-  }, [])
+  // 钱包/充值是可选商业模块(lib/commercial/useWallet.ts),这里只组合
+  const getSocket = useCallback(() => socketRef.current, [])
+  const { wallet, rechargeOpen, setRechargeOpen, createCheckout, refreshWallet } =
+    useWallet(getSocket, connected)
 
   const status = derivedStatus(events)
 

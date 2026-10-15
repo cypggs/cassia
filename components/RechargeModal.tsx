@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Wallet } from '@/lib/useCassia'
+import type { Wallet } from '@/lib/commercial/useWallet'
 import { useI18n } from '@/lib/i18n'
 
 /**

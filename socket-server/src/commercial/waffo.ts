@@ -1,5 +1,5 @@
 import { WaffoPancake } from '@waffo/pancake-ts'
-import type { CreditOrder } from '../store.js'
+import type { CreditOrder } from './store.js'
 
 /**
  * waffo 支付通道（托管收银台 + webhook 回执）。
