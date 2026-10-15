@@ -3,10 +3,12 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const cwd = mkdtempSync(join(tmpdir(), 'pi-probe-sh-'))
-const EXT = '/Users/case/cassia/agent-runtime/pi-extension/persistent-shell.ts'
+const REPO = dirname(dirname(fileURLToPath(import.meta.url)))
+const EXT = join(REPO, 'agent-runtime/pi-extension/persistent-shell.ts')
 
 const child = spawn('pi', [
   '--mode', 'rpc', '--model', 'deepseek/deepseek-flash',

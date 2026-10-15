@@ -56,7 +56,7 @@ RUN npm init -y > /dev/null \
  && npm pkg set type=module \
  && npm install ws@8.21.1 \
  && npm install typebox@1.1.38 \
- && npm install -g @earendil-works/pi-coding-agent@0.87.1 \
+ && npm install -g @earendil-works/pi-coding-agent@1.2.0 \
  && npm cache clean --force \
  && pi --version
 
