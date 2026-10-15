@@ -148,15 +148,17 @@ async function handleDeploy(req: IncomingMessage, res: ServerResponse, url: URL)
   }
   res.writeHead(202, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ ok: true, message: 'deploy triggered' }))
-  // 异步跑，不阻塞 HTTP
+  // 异步跑，不阻塞 HTTP。?rebuild=1 时同时重建 E2B 模板（后台，不阻塞上线）
   const { spawn } = await import('node:child_process')
+  const rebuild = url.searchParams.get('rebuild') === '1' ? '1' : '0'
   const child = spawn('bash', ['deploy/update.sh'], {
     cwd: '/home/ubuntu/cassia',
     detached: true,
     stdio: 'ignore',
+    env: { ...process.env, REBUILD_TEMPLATES: rebuild },
   })
   child.unref()
-  console.log('[deploy] webhook 触发，后台执行 deploy/update.sh')
+  console.log(`[deploy] webhook 触发，后台执行 deploy/update.sh (rebuild=${rebuild})`)
 }
 
 async function uploadFile(
