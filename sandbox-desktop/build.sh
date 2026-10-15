@@ -24,7 +24,8 @@ if [ -f .dockerignore ]; then
   trap 'mv "$DOCKERIGNORE_BAK" .dockerignore' EXIT
 fi
 
-exec e2b template create cassia \
+# 注意:**不要 exec** —— 见 sandbox-lite/build.sh 同名注释(EXIT trap)。
+e2b template create cassia \
   -d sandbox-desktop/e2b.Dockerfile \
   -c "/opt/cassia-desktop/start.sh" \
   --ready-cmd "curl -sf http://localhost:8330/healthz && curl -sf http://localhost:9222/json/version && (echo > /dev/tcp/127.0.0.1/5901)" \

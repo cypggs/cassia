@@ -21,7 +21,9 @@ if [ -f .dockerignore ]; then
   trap 'mv "$DOCKERIGNORE_BAK" .dockerignore' EXIT
 fi
 
-exec e2b template create cassia-lite \
+# 注意:**不要 exec** —— exec 会替换 shell,上面的 EXIT trap 永远不跑,
+# .dockerignore 就丢了(只能靠下次 git reset 捡回来,实测踩过)。
+e2b template create cassia-lite \
   -d sandbox-lite/e2b.Dockerfile \
   -c "/opt/cassia/start.sh" \
   --ready-cmd "curl -sf http://localhost:8330/healthz" \
