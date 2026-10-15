@@ -4,8 +4,20 @@
 #
 # ready-cmd 同时查 runtime 和画面通道：只查 8330 的话，
 # 一个 X 起不来、画面全黑的镜像也会被判成「构建成功」。
+#
+# 注意：仓库根的 .dockerignore 是给 socket-server 镜像用的，排除了
+# agent-runtime/ 等目录。E2B 构建会尊重 .dockerignore，导致 COPY 失败。
+# 构建时临时移走它。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# 临时移走 .dockerignore（E2B 构建需要 agent-runtime/）
+DOCKERIGNORE_BAK=""
+if [ -f .dockerignore ]; then
+  DOCKERIGNORE_BAK=$(mktemp)
+  mv .dockerignore "$DOCKERIGNORE_BAK"
+  trap 'mv "$DOCKERIGNORE_BAK" .dockerignore' EXIT
+fi
 
 exec e2b template create cassia \
   -d sandbox-desktop/e2b.Dockerfile \
