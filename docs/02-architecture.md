@@ -189,8 +189,10 @@ E2B 起沙箱 → agent-runtime 驱动 pi → 事件推到前端 → 中间栏�
 
 ## 8. 待定
 
-- **pause/resume**：P3 之前需要实测 E2B 的 `Sandbox.pause()` / `resume()` 在
-  「Chromium + Xorg + supervisord 全开」的情况下能否干净恢复。
+- ~~**pause/resume**~~：**已实测通过**(2026-10-16,`E2B_TEMPLATE=cassia
+  node --env-file=.env scripts/e2e-dormancy.mjs`)—— Chromium + Xorg +
+  supervisord 全开的桌面沙箱,pause 后 resume 同一沙箱、文件保留、
+  Agent 正常工作。此问题关闭。
 - **`brief` 生成策略**：旁路小模型 vs 主模型自述（见 §3）。
 - **状态 API 用 Connect RPC 还是先上 REST**：Connect 类型安全，
   但要引 protobuf 工具链；P0 阶段 REST 更快。
