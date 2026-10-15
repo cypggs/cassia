@@ -148,8 +148,14 @@ async function handleSwitchTemplate(req: IncomingMessage, res: ServerResponse, u
   }
   res.writeHead(202, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ ok: true, message: `switching to ${template}` }))
+  // 同样走 systemd-run:switch-template.sh 会 restart cassia-socket,
+  // 直接 spawn 会被 cgroup 株连(见 handleDeploy)。
   const { spawn } = await import('node:child_process')
-  const child = spawn('bash', ['deploy/switch-template.sh', template], {
+  const child = spawn('sudo', [
+    '-n', 'systemd-run', '--quiet', '--collect',
+    `--unit=cassia-switch-${Date.now()}`,
+    'bash', 'deploy/switch-template.sh', template,
+  ], {
     cwd: '/home/ubuntu/cassia',
     detached: true,
     stdio: 'ignore',
@@ -184,14 +190,20 @@ async function handleDeploy(req: IncomingMessage, res: ServerResponse, url: URL)
   }
   res.writeHead(202, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ ok: true, message: 'deploy triggered' }))
-  // 异步跑，不阻塞 HTTP。?rebuild=1 时同时重建 E2B 模板（后台，不阻塞上线）
+  // 经 systemd-run 起独立 transient unit:update.sh 第 4 步会 restart
+  // cassia-socket,直接 spawn 的话本进程 cgroup 里的 update.sh 会被一起杀掉
+  // （systemd 默认 KillMode=control-group)。
   const { spawn } = await import('node:child_process')
   const rebuild = url.searchParams.get('rebuild') === '1' ? '1' : '0'
-  const child = spawn('bash', ['deploy/update.sh'], {
+  const child = spawn('sudo', [
+    '-n', 'systemd-run', '--quiet', '--collect',
+    `--unit=cassia-update-${Date.now()}`,
+    `--setenv=REBUILD_TEMPLATES=${rebuild}`,
+    'bash', 'deploy/update.sh',
+  ], {
     cwd: '/home/ubuntu/cassia',
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, REBUILD_TEMPLATES: rebuild },
   })
   child.unref()
   console.log(`[deploy] webhook 触发，后台执行 deploy/update.sh (rebuild=${rebuild})`)
