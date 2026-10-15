@@ -77,13 +77,21 @@ sleep 5
 curl -sf http://127.0.0.1:4000/healthz && echo " socket OK"
 curl -sf -o /dev/null http://127.0.0.1:3000/ && echo " web OK"
 
-# ── 6. 可选：后台重建 E2B 模板 ──
+# ── 6. 可选：重建 E2B 模板 ──
+# 构建必须也走 systemd-run:本脚本自己被 webhook 以 systemd-run 启动时,
+# nohup & 的后台子进程仍在本 unit 的 cgroup 里,脚本一退出就被 systemd
+# 株连杀掉(实测:构建秒死、trap 没跑、.dockerignore 丢在 /tmp)。
 if [ "${REBUILD_TEMPLATES:-0}" = "1" ]; then
   echo "后台重建 E2B 模板（pi 版本已更新）…"
-  sudo -u ubuntu -HE bash -c \
-    'cd /home/ubuntu/cassia && nohup ./sandbox-lite/build.sh > /home/ubuntu/template-build.log 2>&1 &'
-  sudo -u ubuntu -HE bash -c \
-    'cd /home/ubuntu/cassia && nohup ./sandbox-desktop/build.sh > /home/ubuntu/template-build-desktop.log 2>&1 &'
+  TS=$(date +%s)
+  $SUDO systemd-run --quiet --collect --uid=ubuntu \
+    --unit="cassia-tpl-lite-$TS" \
+    --setenv="E2B_API_KEY=${E2B_API_KEY:-}" --setenv="HOME=/home/ubuntu" \
+    bash -c '/home/ubuntu/cassia/sandbox-lite/build.sh > /home/ubuntu/template-build.log 2>&1'
+  $SUDO systemd-run --quiet --collect --uid=ubuntu \
+    --unit="cassia-tpl-desktop-$TS" \
+    --setenv="E2B_API_KEY=${E2B_API_KEY:-}" --setenv="HOME=/home/ubuntu" \
+    bash -c '/home/ubuntu/cassia/sandbox-desktop/build.sh > /home/ubuntu/template-build-desktop.log 2>&1'
 fi
 
 echo "UPDATE_DONE $(date -u +%FT%TZ)"
