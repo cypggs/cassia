@@ -185,7 +185,7 @@ export class PiClient extends EventEmitter {
     }
   }
 
-  /** 崩溃自愈：接回落盘的旧会话（实测见 scripts/probe-pirevive.mjs） */
+  /** 崩溃自愈：接回落盘的旧会话（活证据：scripts/e2e-chaos.mjs 场景 B） */
   switchSession(sessionPath: string): Promise<PiEvent> {
     return this.request('switch_session', { sessionPath }, 30_000)
   }

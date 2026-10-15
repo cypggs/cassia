@@ -139,7 +139,7 @@ function getAgent(sessionId: string, opts: AttachOpts = {}): Agent {
  *
  * pi 退出（崩溃/被杀）不直接删会话 —— 交给 reviveAgent 重建并接回
  * 落盘的会话上下文（pi 把会话写在 ~/.pi/agent/sessions/<编码cwd>/，
- * 实测接回后上下文完整，见 scripts/probe-pirevive.mjs）。
+ * 实测接回后上下文完整，活证据：e2e-chaos.mjs 场景 B）。
  */
 function spawnPi(sessionId: string, agent: Agent): void {
   const cwd = join(WORKSPACE_ROOT, sessionId)
