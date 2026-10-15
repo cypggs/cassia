@@ -38,7 +38,7 @@ plan/persistent-shell 扩展。MCP 是「给 agent 接外部能力」的标准�
 - 风险:MCP server 运行在沙箱内,网络出站不受我们控制 —— 要在
   UI 上暴露「这个会话装了哪些 MCP」
 
-### 2. Codemode —— 建议试点
+### 2. Codemode —— 试点中(2026-10-16)
 
 `pi -t +codemode` 即可叠加在默认工具上(1.1 起 `+name` 是增量语义)。
 1.0 起 codemode prompt 减重 40%,错误信息会教模型自我恢复;支持
@@ -47,10 +47,15 @@ plan/persistent-shell 扩展。MCP 是「给 agent 接外部能力」的标准�
 对 Cassia 的意义:多步批处理任务(如「处理这 50 个文件」)用 codemode
 一个 JS 脚本跑完,比 50 次工具往返省大量 token 和时长。
 
-试点方式:agent-runtime 起 pi 时加 `--tools +codemode`(一个环境变量
-开关,默认关),用 e2e-chaos 回归一遍即可。右栏需要认识 codemode 的
-toolUsed 形态(code 块而非 terminal)—— translate.ts 可能要加一个
-detail 类型。
+**试点已落地**:`PI_TOOLS_ADJUST` 环境变量(agent-runtime → pi `--tools`,
+socket-server 经 Sandbox.create envs 透传,默认空 = 行为不变)。
+已在沙箱实测 pi 1.2.0 RPC 接受 `--tools +codemode`。
+灰度步骤:模板重建带此改动 → 本地 chaos/e2e 带 `PI_TOOLS_ADJUST=+codemode`
+回归(重点观察:模型会不会弃 bash 改用 codemode,e2e 的终端断言是否
+还成立)→ 绿则在 .env.production 开启。
+
+后续若转正:translate.ts 给 codemode 加专用 detail(代码块),而不是
+走 `other` 的通用 payload。
 
 ### 3. Virtual models —— 建议跟进(中期)
 
