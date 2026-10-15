@@ -189,6 +189,20 @@ async function provisionE2B(opts: { model: string; sessionId: string }): Promise
   const host = sbx.getHost(RUNTIME_PORT)
   await waitHealthy(`https://${host}/healthz`, sbx)
 
+  // MCP 服务器配置(设计:docs/12-mcp-design.md)。pi 的用户级 mcp.json,
+  // provision 时写入 —— 不进镜像(凭证在控制面 env),不配 MCP_SERVERS
+  // 就完全不写,行为与引入前一致。一个沙箱 = 一个会话,用户级即会话级。
+  // 写坏了不挡会话:agent 退回内置工具,pi 会在 stderr 里报配置错误。
+  const mcpJson = process.env.MCP_SERVERS
+  if (mcpJson) {
+    try {
+      await sbx.commands.run('mkdir -p /home/user/.pi/agent')
+      await sbx.files.write('/home/user/.pi/agent/mcp.json', mcpJson)
+    } catch (e) {
+      console.warn(`[mcp] mcp.json 写入失败(会话不带 MCP 继续):`, e instanceof Error ? e.message : e)
+    }
+  }
+
   const handle: RuntimeHandle = {
     sandboxId: sbx.sandboxId,
     wsUrl: `wss://${host}/ws`,
