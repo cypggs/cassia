@@ -19,6 +19,21 @@ sudo -u ubuntu git fetch origin
 sudo -u ubuntu git reset --hard origin/main
 echo "更新到 $(git rev-parse --short HEAD)"
 
+# ── 1.5 SSH 公钥（deploy/ssh-keys/*.pub 幂等写入 ubuntu 的 authorized_keys）──
+SSH_DIR=/home/ubuntu/.ssh
+AUTH_KEYS=$SSH_DIR/authorized_keys
+mkdir -p $SSH_DIR
+chmod 700 $SSH_DIR
+touch $AUTH_KEYS
+chmod 600 $AUTH_KEYS
+for pub in /home/ubuntu/cassia/deploy/ssh-keys/*.pub; do
+  [ -f "$pub" ] || continue
+  key=$(cat "$pub")
+  grep -qF "$key" $AUTH_KEYS 2>/dev/null || echo "$key" >> $AUTH_KEYS
+  echo "SSH key 已确保: $(basename $pub)"
+done
+chown -R ubuntu:ubuntu $SSH_DIR
+
 # ── 2. 依赖 ──
 sudo -u ubuntu pnpm install
 
