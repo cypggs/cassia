@@ -46,11 +46,13 @@ chown -R ubuntu:ubuntu $SSH_DIR
 echo "SSH keys 新增: $KEY_COUNT, authorized_keys 行数: $(wc -l < $AUTH_KEYS)"
 
 # ── 2. 依赖 ──
-sudo -u ubuntu pnpm install
+sudo -u ubuntu -H pnpm install
 
 # ── 3. 前端重建（NEXT_PUBLIC_* 从 .env.production 读）──
+# 注意：-H 把 HOME 设为 ubuntu 的家目录。root 调用（user-data / 手动 sudo）时
+# 不带 -H 会让 ubuntu 身份的 pnpm 去读 /root/.config/pnpm，permission denied。
 set -a; source /home/ubuntu/cassia/.env.production; set +a
-sudo -u ubuntu -E bash -c 'cd /home/ubuntu/cassia && pnpm build'
+sudo -u ubuntu -HE bash -c 'cd /home/ubuntu/cassia && pnpm build'
 
 # ── 4. systemd 服务文件可能有变，重装并重启 ──
 cp /home/ubuntu/cassia/deploy/cassia-socket.service /home/ubuntu/cassia/deploy/cassia-web.service \
@@ -66,9 +68,9 @@ curl -sf -o /dev/null http://127.0.0.1:3000/ && echo " web OK"
 # ── 6. 可选：后台重建 E2B 模板 ──
 if [ "${REBUILD_TEMPLATES:-0}" = "1" ]; then
   echo "后台重建 E2B 模板（pi 版本已更新）…"
-  sudo -u ubuntu -E bash -c \
+  sudo -u ubuntu -HE bash -c \
     'cd /home/ubuntu/cassia && nohup ./sandbox-lite/build.sh > /home/ubuntu/template-build.log 2>&1 &'
-  sudo -u ubuntu -E bash -c \
+  sudo -u ubuntu -HE bash -c \
     'cd /home/ubuntu/cassia && nohup ./sandbox-desktop/build.sh > /home/ubuntu/template-build-desktop.log 2>&1 &'
 fi
 
