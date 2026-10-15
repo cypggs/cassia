@@ -60,7 +60,10 @@ sudo -u ubuntu -H pnpm install
 # ── 3. 前端重建（NEXT_PUBLIC_* 从 .env.production 读）──
 # 注意：-H 把 HOME 设为 ubuntu 的家目录。root 调用（user-data / 手动 sudo）时
 # 不带 -H 会让 ubuntu 身份的 pnpm 去读 /root/.config/pnpm，permission denied。
+# source 前关 xtrace：set -x 会把 env 文件逐行（含密钥）trace 进日志
+set +x
 set -a; source /home/ubuntu/cassia/.env.production; set +a
+set -x
 sudo -u ubuntu -HE bash -c 'cd /home/ubuntu/cassia && pnpm build'
 
 # ── 4. systemd 服务文件可能有变，重装并重启 ──
@@ -84,6 +87,8 @@ curl -sf -o /dev/null http://127.0.0.1:3000/ && echo " web OK"
 if [ "${REBUILD_TEMPLATES:-0}" = "1" ]; then
   echo "后台重建 E2B 模板（pi 版本已更新）…"
   TS=$(date +%s)
+  # E2B_API_KEY 在命令行上，set -x 会把它打进日志 —— 这两段关掉 xtrace
+  set +x
   $SUDO systemd-run --quiet --collect --uid=ubuntu \
     --unit="cassia-tpl-lite-$TS" \
     --setenv="E2B_API_KEY=${E2B_API_KEY:-}" --setenv="HOME=/home/ubuntu" \
@@ -92,6 +97,7 @@ if [ "${REBUILD_TEMPLATES:-0}" = "1" ]; then
     --unit="cassia-tpl-desktop-$TS" \
     --setenv="E2B_API_KEY=${E2B_API_KEY:-}" --setenv="HOME=/home/ubuntu" \
     bash -c '/home/ubuntu/cassia/sandbox-desktop/build.sh > /home/ubuntu/template-build-desktop.log 2>&1'
+  set -x
 fi
 
 echo "UPDATE_DONE $(date -u +%FT%TZ)"
