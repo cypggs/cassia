@@ -11,6 +11,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 两个模板构建都动 .dockerignore,并行会 TOCTOU 互踩(实测翻车)。
+# flock 串行化,与启动方式无关。
+exec 9> /tmp/cassia-tpl-build.lock
+flock 9
+
 # 临时移走 .dockerignore（E2B 构建需要 agent-runtime/）
 DOCKERIGNORE_BAK=""
 if [ -f .dockerignore ]; then
