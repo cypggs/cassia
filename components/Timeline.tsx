@@ -134,6 +134,9 @@ function ToolRow({ e, t }: { e: ToolUsedEvent; t: ReturnType<typeof useI18n>['t'
       {e.message.param && <code className="tool-param">{e.message.param}</code>}
       <span className="tool-status">
         {e.status === 'running' ? t('timeline.running') : e.status === 'error' ? t('timeline.failed') : ''}
+        {e.durationMs !== undefined && e.status !== 'running' && (
+          <span className="tool-duration">{(e.durationMs / 1000).toFixed(1)}s</span>
+        )}
       </span>
     </div>
   )

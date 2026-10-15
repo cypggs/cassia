@@ -199,6 +199,7 @@ button.new:hover { color: var(--fg); border-color: var(--accent); }
   margin-left: auto; font-size: 11px; color: var(--dim);
   flex: none; white-space: nowrap;
 }
+.tool-duration { margin-left: 6px; font-variant-numeric: tabular-nums; }
 
 .row.status { color: var(--dim); font-size: 12px; padding-left: 12px; }
 .row.status.failed { color: var(--err); }

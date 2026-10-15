@@ -100,6 +100,8 @@ export interface ToolUsedEvent extends EventBase {
   message: { action: string; param?: string }
   /** 给右侧面板 */
   detail?: ToolDetail
+  /** 执行耗时毫秒(pi 1.1+ 的 tool_execution_end 带来),只在终态事件上有 */
+  durationMs?: number
 }
 
 // ── 计划 ────────────────────────────────────────────────────────────

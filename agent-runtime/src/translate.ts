@@ -345,6 +345,8 @@ export class Translator {
     const full = textOf(result?.content)
     const delta = full.length >= st.sentLen ? full.slice(st.sentLen) : full
     const isError = ev.isError === true
+    // pi 1.1+ 在 tool_execution_end 带真实执行耗时,透传给时间线
+    const durationMs = typeof ev.durationMs === 'number' ? ev.durationMs : undefined
     this.tools.delete(id)
 
     return [
@@ -354,6 +356,7 @@ export class Translator {
         isError ? 'error' : 'success',
         briefOf(st.piTool, st.args),
         this.detailFor(st.piTool, st.args, delta, true),
+        durationMs,
       ),
     ]
   }
@@ -441,6 +444,7 @@ export class Translator {
     status: ToolUsedEvent['status'],
     message: { action: string; param?: string },
     detail: ToolDetail,
+    durationMs?: number,
   ): ToolUsedEvent {
     return {
       id: nid(),
@@ -452,6 +456,7 @@ export class Translator {
       brief: message.param ? `${message.action}: ${message.param}` : message.action,
       message,
       detail,
+      ...(durationMs !== undefined ? { durationMs } : {}),
       planStepId: this.planStepId,
     }
   }
