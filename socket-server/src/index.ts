@@ -154,9 +154,8 @@ async function handleSwitchTemplate(req: IncomingMessage, res: ServerResponse, u
   const child = spawn('sudo', [
     '-n', 'systemd-run', '--quiet', '--collect',
     `--unit=cassia-switch-${Date.now()}`,
-    'bash', 'deploy/switch-template.sh', template,
+    'bash', '/home/ubuntu/cassia/deploy/switch-template.sh', template,
   ], {
-    cwd: '/home/ubuntu/cassia',
     detached: true,
     stdio: 'ignore',
   })
@@ -199,9 +198,8 @@ async function handleDeploy(req: IncomingMessage, res: ServerResponse, url: URL)
     '-n', 'systemd-run', '--quiet', '--collect',
     `--unit=cassia-update-${Date.now()}`,
     `--setenv=REBUILD_TEMPLATES=${rebuild}`,
-    'bash', 'deploy/update.sh',
+    'bash', '/home/ubuntu/cassia/deploy/update.sh',
   ], {
-    cwd: '/home/ubuntu/cassia',
     detached: true,
     stdio: 'ignore',
   })
