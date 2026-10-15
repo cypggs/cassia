@@ -31,6 +31,8 @@ const PORT = Number(process.env.PORT ?? 8330)
 const WORKSPACE_ROOT = process.env.WORKSPACE ?? process.cwd()
 const MODEL = process.env.PI_MODEL ?? 'deepseek/deepseek-flash'
 const THINKING = process.env.PI_THINKING ?? 'off'
+/** pi 工具集增量调整(逗号分隔,如 "+codemode")。默认空 = pi 默认工具 */
+const TOOLS_ADJUST = (process.env.PI_TOOLS_ADJUST ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 
 const BASE_PROMPT = `
 你在一个可视化的 Agent 平台里工作，用户能实时看到你的每一步操作。
@@ -150,6 +152,7 @@ function spawnPi(sessionId: string, agent: Agent): void {
     systemPromptAppend: SYSTEM_APPEND,
     env: agent.opts.env,
     extensions: EXTENSIONS,
+    toolsAdjust: TOOLS_ADJUST,
   })
   agent.pi = pi
 

@@ -166,6 +166,8 @@ async function provisionE2B(opts: { model: string; sessionId: string }): Promise
       envs: {
         PI_MODEL: opts.model,
         ...(process.env.PI_PROVIDER ? { PI_PROVIDER: process.env.PI_PROVIDER } : {}),
+        // 工具集调整(如 +codemode)也是非敏感运行参数,同通道进沙箱
+        ...(process.env.PI_TOOLS_ADJUST ? { PI_TOOLS_ADJUST: process.env.PI_TOOLS_ADJUST } : {}),
       },
       // 归属标记：存储对账脚本（scripts/sandbox-storage-report.mjs）靠它
       // 认 sandbox → session 的映射，孤儿/超龄才敢直接 kill

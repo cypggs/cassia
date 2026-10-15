@@ -13,6 +13,11 @@ export interface PiClientOptions {
   model?: string
   provider?: string
   thinking?: string
+  /**
+   * pi 1.1+ 的 --tools 增量调整项(如 ['+codemode'] 叠加 codemode,
+   * ['-write'] 关掉 write)。空 = pi 默认工具集。
+   */
+  toolsAdjust?: string[]
   systemPromptAppend?: string
   bin?: string
   /**
@@ -51,6 +56,7 @@ export class PiClient extends EventEmitter {
   start(): void {
     const args = ['--mode', 'rpc', '--no-extensions', '--no-skills']
     for (const ext of this.opts.extensions ?? []) args.push('-e', ext)
+    if (this.opts.toolsAdjust?.length) args.push('--tools', this.opts.toolsAdjust.join(','))
     if (this.opts.model) args.push('--model', this.opts.model)
     if (this.opts.provider) args.push('--provider', this.opts.provider)
     if (this.opts.thinking) args.push('--thinking', this.opts.thinking)
