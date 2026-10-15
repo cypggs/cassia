@@ -18,6 +18,16 @@ YOUR_DOMAIN {
 		reverse_proxy 127.0.0.1:4000
 	}
 
+	# 部署 webhook(POST /deploy、/switch-template)。token 错误时 socket-server
+	# 回 404,不暴露端点存在。不开 4000 端口也能从外网触发部署。
+	handle /deploy {
+		reverse_proxy 127.0.0.1:4000
+	}
+
+	handle /switch-template {
+		reverse_proxy 127.0.0.1:4000
+	}
+
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}
