@@ -83,6 +83,12 @@ const http = createServer((req, res) => {
   }
   // 商业化 HTTP 路由（waffo 支付回执）。返回 true 表示已接管
   if (commercial.handleHttp(req, res, url)) return
+  // 部署 webhook：POST /deploy?token=xxx，触发 git pull + 重建 + 重启。
+  // 给无 SSH 环境的迭代部署用（/loop 工作流）。token 在 .env.production 的
+  // DEPLOY_TOKEN，没配则此端点直接 404。
+  if (url.pathname === '/deploy' && req.method === 'POST') {
+    return void handleDeploy(req, res, url)
+  }
   // 附件通道。路径形态：/sessions/:sid/files（POST 上传 / GET 列表）、
   // /sessions/:sid/file?path=（GET 下载）
   const files = url.pathname.match(/^\/sessions\/([^/]+)\/files$/)
@@ -114,6 +120,43 @@ function safeRel(raw: string): string | null {
   const parts = raw.split('/').filter(Boolean)
   if (!parts.length || parts.some((p) => p === '.' || p === '..')) return null
   return parts.join('/')
+}
+
+/**
+ * 部署 webhook 处理。token 对不上或没配直接 404（不暴露端点存在）。
+ * 验证方式（按优先级）：
+ *   1. DEPLOY_TOKEN 环境变量（明文 token）
+ *   2. DEPLOY_TOKEN_HASH 环境变量（sha256 hex）
+ *   3. 内置 hash（首次部署用，token 由运维保管）
+ * 触发后异步执行 deploy/update.sh，HTTP 立刻回 202。
+ */
+async function handleDeploy(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  // 内置 hash 对应的 token 由运维在安全渠道保管，不进仓库
+  const BUILTIN_HASH = 'fdc3db78b4c5a24ff70c6c9e4af0803a2db79ef7e54026acbda9b14d06a87580'
+  const token = process.env.DEPLOY_TOKEN
+  const tokenHash = process.env.DEPLOY_TOKEN_HASH ?? BUILTIN_HASH
+  const provided = url.searchParams.get('token') ?? req.headers.authorization?.replace(/^Bearer /, '')
+  let ok = false
+  if (provided && token && provided === token) ok = true
+  if (!ok && provided && tokenHash) {
+    const { createHash } = await import('node:crypto')
+    ok = createHash('sha256').update(provided).digest('hex') === tokenHash
+  }
+  if (!ok) {
+    res.writeHead(404).end()
+    return
+  }
+  res.writeHead(202, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, message: 'deploy triggered' }))
+  // 异步跑，不阻塞 HTTP
+  const { spawn } = await import('node:child_process')
+  const child = spawn('bash', ['deploy/update.sh'], {
+    cwd: '/home/ubuntu/cassia',
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+  console.log('[deploy] webhook 触发，后台执行 deploy/update.sh')
 }
 
 async function uploadFile(
