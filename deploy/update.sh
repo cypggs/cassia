@@ -8,6 +8,15 @@
 #
 # 日志：/var/log/cassia-update.log
 set -euo pipefail
+
+# git reset 会替换本脚本文件，而 bash 边执行边读 —— 先复制到 /tmp re-exec，
+# 保证整个运行用的是触发时刻的版本（修复「webhook 要触发两次」的坑）
+if [ "${UPDATE_SH_REEXEC:-0}" != "1" ]; then
+  TMP=/tmp/cassia-update-$$.sh
+  cp "$0" "$TMP"
+  UPDATE_SH_REEXEC=1 exec bash "$TMP" "$@"
+fi
+
 exec > /var/log/cassia-update.log 2>&1
 set -x
 
@@ -55,10 +64,13 @@ set -a; source /home/ubuntu/cassia/.env.production; set +a
 sudo -u ubuntu -HE bash -c 'cd /home/ubuntu/cassia && pnpm build'
 
 # ── 4. systemd 服务文件可能有变，重装并重启 ──
-cp /home/ubuntu/cassia/deploy/cassia-socket.service /home/ubuntu/cassia/deploy/cassia-web.service \
+# 脚本可能以 root（手动 sudo）或 ubuntu（webhook）运行，特权操作统一走 SUDO
+SUDO=""
+[ "$(whoami)" != "root" ] && SUDO="sudo -n"
+$SUDO cp /home/ubuntu/cassia/deploy/cassia-socket.service /home/ubuntu/cassia/deploy/cassia-web.service \
    /etc/systemd/system/
-systemctl daemon-reload
-systemctl restart cassia-socket cassia-web
+$SUDO systemctl daemon-reload
+$SUDO systemctl restart cassia-socket cassia-web
 
 # ── 5. 健康检查 ──
 sleep 5
