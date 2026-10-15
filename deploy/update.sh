@@ -20,19 +20,30 @@ sudo -u ubuntu git reset --hard origin/main
 echo "更新到 $(git rev-parse --short HEAD)"
 
 # ── 1.5 SSH 公钥（deploy/ssh-keys/*.pub 幂等写入 ubuntu 的 authorized_keys）──
+# 注意：此脚本可能以 ubuntu（webhook）或 root（user-data/手动 sudo）运行，
+# 用 $SUDO_USER 或 whoami 判断，避免 sudo 嵌套失败
+RUN_USER=$(whoami)
+echo "运行用户: $RUN_USER"
 SSH_DIR=/home/ubuntu/.ssh
 AUTH_KEYS=$SSH_DIR/authorized_keys
 mkdir -p $SSH_DIR
 chmod 700 $SSH_DIR
 touch $AUTH_KEYS
 chmod 600 $AUTH_KEYS
+KEY_COUNT=0
 for pub in /home/ubuntu/cassia/deploy/ssh-keys/*.pub; do
   [ -f "$pub" ] || continue
   key=$(cat "$pub")
-  grep -qF "$key" $AUTH_KEYS 2>/dev/null || echo "$key" >> $AUTH_KEYS
-  echo "SSH key 已确保: $(basename $pub)"
+  if grep -qF "$key" $AUTH_KEYS 2>/dev/null; then
+    echo "SSH key 已存在: $(basename $pub)"
+  else
+    echo "$key" >> $AUTH_KEYS
+    echo "SSH key 已写入: $(basename $pub)"
+    KEY_COUNT=$((KEY_COUNT+1))
+  fi
 done
 chown -R ubuntu:ubuntu $SSH_DIR
+echo "SSH keys 新增: $KEY_COUNT, authorized_keys 行数: $(wc -l < $AUTH_KEYS)"
 
 # ── 2. 依赖 ──
 sudo -u ubuntu pnpm install
