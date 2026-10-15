@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentEvent, SandboxUpdateEvent, TerminalDetail, TextEditorDetail, ToolUsedEvent } from '@cassia/shared'
 import { SOCKET_URL } from '@/lib/useCassia'
-import { authHeaders, downloadSessionFile } from '@/lib/authToken'
+import { authHeaders, downloadSessionFile } from '@/lib/commercial/authToken'
 import { useI18n, type I18nKey } from '@/lib/i18n'
 
 /**

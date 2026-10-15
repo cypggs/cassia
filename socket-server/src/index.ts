@@ -10,20 +10,10 @@ import type {
   SessionSummary,
   UsageReportEvent,
 } from '@cassia/shared'
-import { verifyWebhook, WebhookEventType, type WebhookEventData } from '@waffo/pancake-ts'
 import { RuntimeBridge } from './bridge.js'
 import { provision, reconnect, type RuntimeHandle } from './sandbox.js'
 import { createStore } from './store.js'
-import { authEnabled, verifyRequest, verifyToken, type AuthUser } from './auth.js'
-import {
-  CODE_BUDGET_CAP,
-  CODE_INSUFFICIENT,
-  creditsEnabled,
-  priceUsage,
-  SESSION_CREDIT_CAP,
-  TRIAL_CREDITS,
-} from './credits.js'
-import { createCheckout, packs, waffoEnabled } from './waffo.js'
+import { createCommercial, type Commercial } from './commercial/index.js'
 import { compactHistory } from './compact.js'
 
 /**
@@ -91,10 +81,8 @@ const http = createServer((req, res) => {
     })
     return
   }
-  // waffo 支付回执。验签要原始字节 —— 必须赶在任何 body 解析之前拿走
-  if (url.pathname === '/webhooks/waffo' && req.method === 'POST') {
-    return void waffoWebhook(req, res)
-  }
+  // 商业化 HTTP 路由（waffo 支付回执）。返回 true 表示已接管
+  if (commercial.handleHttp(req, res, url)) return
   // 附件通道。路径形态：/sessions/:sid/files（POST 上传 / GET 列表）、
   // /sessions/:sid/file?path=（GET 下载）
   const files = url.pathname.match(/^\/sessions\/([^/]+)\/files$/)
@@ -134,7 +122,7 @@ async function uploadFile(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  if ((await guardHttp(req, res, sessionId)) === undefined) return
+  if ((await commercial.guardHttp(req, res, sessionId)) === undefined) return
   if (!(await store.getSession(sessionId))) return json(res, 404, { error: '会话不存在' })
   const name = sanitizeName(url.searchParams.get('name') ?? '')
   if (!name) return json(res, 400, { error: '文件名缺失或不合法' })
@@ -174,7 +162,7 @@ async function listSessionFiles(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  if ((await guardHttp(req, res, sessionId)) === undefined) return
+  if ((await commercial.guardHttp(req, res, sessionId)) === undefined) return
   if (!(await store.getSession(sessionId))) return json(res, 404, { error: '会话不存在' })
   if (!(await everHadSandbox(sessionId))) return json(res, 200, { files: [] })
   try {
@@ -202,7 +190,7 @@ async function downloadFile(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  if ((await guardHttp(req, res, sessionId)) === undefined) return
+  if ((await commercial.guardHttp(req, res, sessionId)) === undefined) return
   if (!(await store.getSession(sessionId))) return json(res, 404, { error: '会话不存在' })
   const rel = safeRel(url.searchParams.get('path') ?? '')
   if (!rel) return json(res, 400, { error: '路径不合法' })
@@ -232,150 +220,24 @@ const io = new Server(http, {
 })
 
 /**
- * 鉴权中间件。开放模式（没配 INSFORGE_URL）直接放行，userId 恒 undefined，
- * 行为和鉴权引入前一致；鉴权模式验 socket 令牌。用户档案由 InsForge 管
- * （auth.users），这里不再另建 users 表。
+ * 商业化可选模块（鉴权/积分/支付）。开关在构造时一次决定：
+ * 没配 INSFORGE_URL 就是 NoopCommercial —— 主链路里没有任何商业化的 if，
+ * owns/hasCredits/guardHttp 全是直通。以后换整套商业化方案，
+ * 只需要实现 Commercial 接口并换掉 createCommercial。
  */
-io.use(async (socket, next) => {
-  if (!authEnabled) return next()
-  const user = await verifyToken(String(socket.handshake.auth?.token ?? ''))
-  if (!user) return next(new Error('unauthorized'))
-  socket.data.userId = user.uid
-  socket.data.email = user.email
-  // 建档 + 试用积分（幂等，只发一次）。失败不挡登录 —— 积分治理是增强不是门槛
-  if (creditsEnabled) {
-    await store.ensureWallet(user.uid, TRIAL_CREDITS).catch((e) => console.warn('[credits] ensureWallet 失败:', e))
-  }
-  next()
+const commercial: Commercial = createCommercial({
+  io,
+  store,
+  emit,
+  isAgentRunning: (sessionId) => live.get(sessionId)?.agentRunning ?? false,
+  abortBridge: (sessionId) => live.get(sessionId)?.bridge?.abort(),
 })
 
-/**
- * 属主校验。开放模式恒 true；鉴权模式会话的 user_id 必须等于当前用户。
- * 存量会话（user_id NULL）谁都不属于 —— 封存不可见。
- */
-async function owns(userId: string | undefined, sessionId: string): Promise<boolean> {
-  if (!authEnabled) return true
-  return !!userId && (await store.sessionOwner(sessionId)) === userId
-}
-
-/**
- * HTTP 端点的鉴权 + 属主校验。返回 undefined 表示放行；
- * 否则已写好响应（401 未登录 / 404 不属主 —— 不属主按不存在处理，防枚举）。
- */
-async function guardHttp(
-  req: Parameters<typeof verifyRequest>[0],
-  res: ServerResponse,
-  sessionId: string,
-): Promise<AuthUser | null | undefined> {
-  if (!authEnabled) return null
-  const user = await verifyRequest(req)
-  if (!user) return json(res, 401, { error: '未登录' }), undefined
-  if ((await store.sessionOwner(sessionId)) !== user.uid) return json(res, 404, { error: '会话不存在' }), undefined
-  return user
-}
+io.use((socket, next) => commercial.authMiddleware(socket, next))
 
 function emit(sessionId: string, event: AgentEvent): void {
   store.append(sessionId, event)
   io.to(sessionId).emit('event', { sessionId, event })
-}
-
-/**
- * waffo 支付回执：验签（SDK 内置 test/prod 公钥，event.mode 区分环境）→
- * 先 200 再异步入账。入账幂等性不在这一层 —— completeOrder 的
- * 「pending 才翻转」+ ledger UNIQUE(ref) 已经兜住 webhook 重放。
- */
-async function waffoWebhook(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const chunks: Buffer[] = []
-  for await (const c of req) chunks.push(c as Buffer)
-  const body = Buffer.concat(chunks).toString('utf8')
-
-  let event
-  try {
-    event = verifyWebhook<WebhookEventData>(body, req.headers['x-waffo-signature'] as string | undefined)
-  } catch (e) {
-    console.warn('[waffo] webhook 验签失败:', e instanceof Error ? e.message : e)
-    return json(res, 401, { error: 'invalid signature' })
-  }
-  // waffo 重试策略不容慢响应 —— 先确认收到，处理放后台
-  json(res, 200, { ok: true })
-
-  if (event.eventType !== WebhookEventType.OrderCompleted) return
-  const orderId = event.data?.orderMetadata?.orderId ?? event.data?.orderMerchantExternalId
-  if (!orderId) {
-    console.warn('[waffo] order.completed 缺 metadata.orderId，无法入账', event.eventId)
-    return
-  }
-  try {
-    const done = await store.completeOrder(orderId, event.data.orderId)
-    if (!done) return // 重放或未知单
-    console.log(`[waffo] 入账 order=${orderId} mode=${event.mode} credits 已到账`)
-    io.to(`user:${done.userId}`).emit('wallet_update', { balance: done.balance })
-  } catch (e) {
-    console.error(`[waffo] 入账失败 order=${orderId}:`, e)
-  }
-}
-
-/**
- * 发消息前的积分闸。开放模式/未启用直接放行；余额 ≤0 发「积分不足」
- * 状态事件（code 是前端开充值弹框的信号，不渲染文案匹配）。
- * agentStatus 如实反映当前运行态 —— steer 被拦时 agent 还在跑，不能说 stopped。
- */
-async function hasCredits(userId: string | undefined, sessionId: string): Promise<boolean> {
-  if (!creditsEnabled || !userId) return true
-  if ((await store.getBalance(userId)) > 0) return true
-  const l = live.get(sessionId)
-  emit(sessionId, {
-    id: nid(),
-    type: 'statusUpdate',
-    timestamp: Date.now(),
-    agentStatus: l?.agentRunning ? 'running' : 'stopped',
-    brief: '积分不足',
-    description: '积分已用完，充值后可继续使用',
-    code: CODE_INSUFFICIENT,
-  })
-  return false
-}
-
-/**
- * 扣一轮用量。挂在 bridge 事件钩子上异步跑，不阻塞广播。
- * 扣完做两道后续：推 wallet_update（前端余额实时刷新）；
- * 查会话预算保险丝（到顶 abort 当前 turn）。
- */
-async function chargeForUsage(sessionId: string, e: UsageReportEvent): Promise<void> {
-  try {
-    const owner = await store.sessionOwner(sessionId)
-    if (!owner) return // 封存存量/开放模式没有属主，无从扣起
-    const { costUsd, credits } = priceUsage(e, e.costUsd)
-    const balance = await store.chargeUsage({
-      sessionId,
-      userId: owner,
-      model: e.model,
-      input: e.input,
-      output: e.output,
-      cacheRead: e.cacheRead,
-      cacheWrite: e.cacheWrite,
-      costUsd,
-      credits,
-    })
-    io.to(`user:${owner}`).emit('wallet_update', { balance })
-
-    const total = await store.sumSessionCredits(sessionId)
-    if (total >= SESSION_CREDIT_CAP) {
-      live.get(sessionId)?.bridge?.abort()
-      emit(sessionId, {
-        id: nid(),
-        type: 'statusUpdate',
-        timestamp: Date.now(),
-        agentStatus: 'failed',
-        brief: '会话预算已达上限',
-        description: `本会话累计消耗 ${total} 积分，已达 ${SESSION_CREDIT_CAP} 上限，已自动停止。新建会话可继续`,
-        code: CODE_BUDGET_CAP,
-      })
-    }
-  } catch (err) {
-    // 扣费失败不该炸事件流 —— 但这一轮就白送了，必须喊出来对账
-    console.error(`[${sessionId}] usage 扣费失败:`, err)
-  }
 }
 
 function systemEvent(text: string): AgentEvent {
@@ -405,15 +267,9 @@ function openBridge(sessionId: string, handle: RuntimeHandle): RuntimeBridge {
         startWaiters.delete(sessionId)
       }
     }
-    // 成本计量：turn 结束的真实 usage。按官价表定价（pi 内置价目是涨价前
-    // 旧价，只作表外模型兜底），把换算好的积分和计费口径的美元成本写进事件
-    // （广播+持久化的就是扣费那一刻的快照），再异步扣费不挡广播
-    if (e.type === 'usageReport' && creditsEnabled) {
-      const priced = priceUsage(e, e.costUsd)
-      e.costUsd = priced.costUsd
-      e.credits = priced.credits
-      void chargeForUsage(sessionId, e)
-    }
+    // 成本计量（商业化可选）：turn 结束的真实 usage，定价 + 异步扣费。
+    // Noop 版什么都不做 —— 开放模式事件原样广播。
+    if (e.type === 'usageReport') commercial.onUsageReport(sessionId, e)
     emit(sessionId, e)
   })
   bridge.on('warn', (m: string) => console.warn(`[${sessionId}] ${m}`))
@@ -645,13 +501,13 @@ io.on('connection', (socket) => {
 
   socket.on('rename_session', async (p: { sessionId: string; title: string }, ack?: (ok: boolean) => void) => {
     const title = String(p.title ?? '').trim().slice(0, 60)
-    if (!title || !(await owns(userId, p.sessionId))) return ack?.(false)
+    if (!title || !(await commercial.owns(userId, p.sessionId))) return ack?.(false)
     await store.renameSession(p.sessionId, title)
     ack?.(true)
   })
 
   socket.on('pin_session', async (p: { sessionId: string; pinned: boolean }, ack?: (ok: boolean) => void) => {
-    if (!(await owns(userId, p.sessionId))) return ack?.(false)
+    if (!(await commercial.owns(userId, p.sessionId))) return ack?.(false)
     await store.setPinned(p.sessionId, !!p.pinned)
     ack?.(true)
   })
@@ -661,7 +517,7 @@ io.on('connection', (socket) => {
    * 广播 session_deleted 让同用户的其它客户端把它从界面上抹掉。
    */
   socket.on('delete_session', async (p: { sessionId: string }, ack?: (ok: boolean) => void) => {
-    if (!(await owns(userId, p.sessionId))) return ack?.(false)
+    if (!(await commercial.owns(userId, p.sessionId))) return ack?.(false)
     const l = live.get(p.sessionId)
     if (l) {
       l.bridge?.close()
@@ -675,7 +531,7 @@ io.on('connection', (socket) => {
 
   socket.on('join_session', async (p: JoinSessionPayload, ack?: (a: JoinSessionAck | null) => void) => {
     try {
-      const session = (await owns(userId, p.sessionId)) ? await store.getSession(p.sessionId) : undefined
+      const session = (await commercial.owns(userId, p.sessionId)) ? await store.getSession(p.sessionId) : undefined
       if (!session) return ack?.(null)
       socket.join(p.sessionId)
       touch(p.sessionId)
@@ -701,15 +557,15 @@ io.on('connection', (socket) => {
   })
 
   socket.on('send_message', async (p: { sessionId: string; text: string; attachments?: Attachment[] }) => {
-    if (!(await owns(userId, p.sessionId))) return
-    if (!(await hasCredits(userId, p.sessionId))) return
+    if (!(await commercial.owns(userId, p.sessionId))) return
+    if (!(await commercial.hasCredits(userId, p.sessionId))) return
     await deliverMessage(p.sessionId, p.text, true, p.attachments)
   })
 
   /** 任务执行中途插话 —— pi 的 steer */
   socket.on('steer', async (p: { sessionId: string; text: string; attachments?: Attachment[] }) => {
-    if (!(await owns(userId, p.sessionId))) return
-    if (!(await hasCredits(userId, p.sessionId))) return
+    if (!(await commercial.owns(userId, p.sessionId))) return
+    if (!(await commercial.hasCredits(userId, p.sessionId))) return
     const l = live.get(p.sessionId)
     const text = withAttachmentNote(p.text, p.attachments)
     // 桥活着才走 steer；休眠/桥死（沙箱被外部暂停过）退回完整的消息流程 ——
@@ -732,60 +588,12 @@ io.on('connection', (socket) => {
   })
 
   socket.on('abort', async (p: { sessionId: string }) => {
-    if (!(await owns(userId, p.sessionId))) return
+    if (!(await commercial.owns(userId, p.sessionId))) return
     live.get(p.sessionId)?.bridge?.abort()
   })
 
-  /** 钱包快照：余额 + 最近流水 + 可购档位（未启用积分返回 null） */
-  socket.on('get_wallet', async (_: unknown, ack?: (w: unknown) => void) => {
-    if (!creditsEnabled || !userId) return ack?.(null)
-    ack?.({
-      balance: await store.getBalance(userId),
-      ledger: await store.recentLedger(userId, 20),
-      packs: packs.map((p) => ({ key: p.key, amount: p.amount, credits: p.credits })),
-      waffo: waffoEnabled,
-    })
-  })
-
-  /**
-   * 开收银台：先落本地 pending 订单（id 进 metadata 当幂等纽带），
-   * 再向 waffo 要托管页 URL。waffo 失败就把单子废掉，不留僵尸 pending。
-   */
-  socket.on('create_checkout', async (p: { pack: string }, ack?: (r: { checkoutUrl: string } | null) => void) => {
-    if (!creditsEnabled || !userId || !waffoEnabled) return ack?.(null)
-    const pack = packs.find((k) => k.key === p?.pack)
-    if (!pack) return ack?.(null)
-    const order = {
-      id: nid(),
-      userId,
-      productId: pack.productId,
-      pack: pack.key,
-      amount: pack.amount,
-      credits: pack.credits,
-      status: 'pending' as const,
-      createdAt: Date.now(),
-    }
-    try {
-      const checkoutUrl = await createCheckout(order, socket.data.email as string | undefined)
-      await store.createOrder(order)
-      ack?.({ checkoutUrl })
-    } catch (e) {
-      console.error('[waffo] createCheckout 失败:', e)
-      ack?.(null)
-    }
-  })
-
-  // e2e 后门：直接入账（负值 = 扣减，测耗尽路径用）。生产 env 绝不设
-  // CREDITS_DEBUG —— 注册了才是漏洞
-  if (process.env.CREDITS_DEBUG === '1') {
-    socket.on('debug_grant', async (p: { credits: number }, ack?: (r: { balance: number } | null) => void) => {
-      if (!creditsEnabled || !userId) return ack?.(null)
-      const credits = Math.max(-100_000, Math.min(100_000, Math.floor(p?.credits ?? 0)))
-      const balance = await store.grantCredits(userId, credits, `debug:${nid()}`)
-      io.to(`user:${userId}`).emit('wallet_update', { balance })
-      ack?.({ balance })
-    })
-  }
+  // 商业化 socket handlers（钱包/收银台/e2e 后门）。Noop 版不注册任何东西。
+  commercial.registerSocketHandlers(socket, userId)
 })
 
 type Attachment = NonNullable<ChatEvent['attachments']>[number]
@@ -908,10 +716,7 @@ async function waitAndSend(send: () => boolean, tries = 30): Promise<boolean> {
 
 http.listen(PORT, () => {
   console.log(`socket-server on :${PORT}  model=${MODEL}`)
-  console.log(`auth: ${authEnabled ? '强制登录（INSFORGE_URL 已配）' : '开放模式（未配 INSFORGE_URL）'}`)
-  if (creditsEnabled) {
-    console.log(`credits: 启用（试用 ${TRIAL_CREDITS} / 会话上限 ${SESSION_CREDIT_CAP} / waffo ${waffoEnabled ? '已配' : '未配'}）`)
-  }
+  commercial.logStartup()
   console.log(
     process.env.AGENT_RUNTIME_URL
       ? `runtime: local (${process.env.AGENT_RUNTIME_URL})`

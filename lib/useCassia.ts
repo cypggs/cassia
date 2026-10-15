@@ -9,7 +9,7 @@ import type {
   JoinSessionAck,
   SessionSummary,
 } from '@cassia/shared'
-import { SOCKET_URL, getSocketToken, authHeaders } from './authToken'
+import { SOCKET_URL, getSocketToken, authHeaders } from './commercial/authToken'
 import { useI18n } from './i18n'
 
 export { SOCKET_URL }

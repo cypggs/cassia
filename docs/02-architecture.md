@@ -281,7 +281,16 @@ pi 大约每周一版。镜像里的 pi **钉死版本、自动化 bump、门禁
 本机开发模式（`AGENT_RUNTIME_URL`）跑的是 PATH 上的 pi，和镜像版本是两回事；
 探针恰好利用这一点，让本机先当小白鼠。
 
-## 11. 认证与多用户（InsForge）
+## 11. 认证与多用户（InsForge）—— 可选商业化模块
+
+**本节全部内容是可选的。** 鉴权、积分、支付三件套住在
+`socket-server/src/commercial/`（auth.ts / credits.ts / waffo.ts +
+统一门面 index.ts），前端对应 `lib/commercial/`。主链路（index.ts）里
+没有任何商业化的 if —— 开关在 `createCommercial()` 构造时一次决定：
+没配 `INSFORGE_URL` 就是 NoopCommercial，所有方法直通/空实现。
+
+替换整套商业化方案（换 auth 供应商、换支付通道）只需要实现
+`Commercial` 接口并换掉 `createCommercial`，index.ts 不用动。
 
 认证外包给 InsForge（评估与分工见 `docs/04-insforge-backend.md`）：OAuth 应用、
 用户库、令牌签发都在后端；**开关由环境变量驱动** —— 前端不配

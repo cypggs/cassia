@@ -4,7 +4,7 @@ import { memo, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentEvent, PlanTask, PlanUpdateEvent, ToolUsedEvent } from '@cassia/shared'
-import { downloadSessionFile } from '@/lib/authToken'
+import { downloadSessionFile } from '@/lib/commercial/authToken'
 import { useI18n } from '@/lib/i18n'
 
 /**

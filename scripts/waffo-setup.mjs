@@ -37,7 +37,7 @@ if (!merchantId || !privateKey) {
 
 const client = new WaffoPancake({ merchantId, privateKey })
 
-// 与 socket-server/src/waffo.ts 的 PACK_DEFS 一一对应 —— 改价要两边一起改
+// 与 socket-server/src/commercial/waffo.ts 的 PACK_DEFS 一一对应 —— 改价要两边一起改
 const PACKS = [
   { env: 'WAFFO_PRODUCT_PACK_500', name: 'Cassia — 500 积分', amount: '5.00', credits: 500 },
   { env: 'WAFFO_PRODUCT_PACK_2000', name: 'Cassia — 2200 积分', amount: '20.00', credits: 2200 },
