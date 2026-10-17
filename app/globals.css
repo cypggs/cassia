@@ -14,6 +14,8 @@
 
 * { box-sizing: border-box; }
 
+button { font: inherit; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -25,8 +27,9 @@ html, body {
 
 .layout {
   display: grid;
-  grid-template-columns: 260px minmax(420px, 1fr) minmax(420px, 1fr);
+  grid-template-columns: clamp(220px, 22vw, 260px) minmax(0, 1fr) minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
   gap: 1px;
   background: var(--line);
 }
@@ -315,13 +318,16 @@ button.attach:disabled { opacity: .35; cursor: default; }
 /* ── 右：计算环境 ────────────────────────────────── */
 
 .computer { background: #0e1116; }
-.tabs { display: flex; gap: 4px; }
+.tabs { display: flex; gap: 4px; flex: none; }
 .tab {
   background: none; border: 0; color: var(--dim);
   padding: 4px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer;
 }
 .tab.on { background: var(--panel-2); color: var(--fg); }
-.sandbox-id { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.sandbox-id {
+  font-family: var(--mono); font-size: 11px; color: var(--dim);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* 终端和画面都常驻，只切显隐 —— 理由见 ComputerPanel.tsx */
 .panel-body > .view { height: 100%; }
@@ -477,29 +483,29 @@ button.attach:disabled { opacity: .35; cursor: default; }
 /* ── 充值弹框 ── */
 .modal.recharge { width: 460px; }
 .recharge-unavailable { padding: 12px 0 4px; }
-.pack-grid {
+.recharge .pack-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
   margin: 14px 0 18px;
 }
-.pack-card {
+.recharge .pack-card {
   position: relative; display: flex; flex-direction: column; align-items: center;
   gap: 4px; padding: 16px 10px 12px;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
   color: var(--fg); cursor: pointer; font: inherit;
 }
-.pack-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-.pack-card:disabled { opacity: 0.6; cursor: wait; transform: none; }
-.pack-card.best { border-color: var(--accent); }
-.pack-badge {
+.recharge .pack-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.recharge .pack-card:disabled { opacity: 0.6; cursor: wait; transform: none; }
+.recharge .pack-card.best { border-color: var(--accent); }
+.recharge .pack-badge {
   position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
   background: var(--accent); color: #0b0d10; border-radius: 999px;
   font-size: 10px; font-weight: 700; padding: 1px 8px; white-space: nowrap;
 }
-.pack-credits { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.pack-credits small { font-size: 11px; font-weight: 400; color: var(--dim); }
-.pack-price { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.pack-bonus { font-size: 11px; color: var(--ok); font-weight: 600; }
-.pack-buy {
+.recharge .pack-credits { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.recharge .pack-credits small { font-size: 11px; font-weight: 400; color: var(--dim); }
+.recharge .pack-price { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.recharge .pack-bonus { font-size: 11px; color: var(--ok); font-weight: 600; }
+.recharge .pack-buy {
   margin-top: 6px; font-size: 12px; color: var(--accent);
   border-top: 1px solid var(--line); width: 100%; padding-top: 8px;
 }
@@ -549,17 +555,17 @@ button.attach:disabled { opacity: .35; cursor: default; }
 .login-page .site-footer { border-top: none; position: absolute; bottom: 12px; left: 0; right: 0; }
 
 .packs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
-.pack-card {
+.packs .pack-card {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
   text-align: center;
 }
-.pack-name { font-weight: 600; margin-bottom: 4px; }
-.pack-price { font-size: 24px; font-weight: 700; color: var(--accent); }
-.pack-credits { margin: 6px 0 2px; }
-.pack-note { font-size: 12px; }
+.packs .pack-name { font-weight: 600; margin-bottom: 4px; }
+.packs .pack-price { font-size: 24px; font-weight: 700; color: var(--accent); }
+.packs .pack-credits { margin: 6px 0 2px; }
+.packs .pack-note { font-size: 12px; }
 @media (max-width: 560px) { .packs { grid-template-columns: 1fr; } }
 .recharge-failed { color: var(--err); font-size: 12.5px; margin: 10px 0 0; }
 
@@ -612,8 +618,8 @@ html[data-theme='light'] {
   --panel-2: #eef0f4;
   --line: #d8dce3;
   --fg: #1d2431;
-  --dim: #68738a;
-  --accent: #2f7de1;
+  --dim: #606b80;
+  --accent: #1f66c2;
   --ok: #1e9e5c;
   --warn: #b57d1f;
   --err: #d33f4f;
@@ -628,8 +634,8 @@ html[data-theme='light'] {
     --panel-2: #eef0f4;
     --line: #d8dce3;
     --fg: #1d2431;
-    --dim: #68738a;
-    --accent: #2f7de1;
+    --dim: #606b80;
+    --accent: #1f66c2;
     --ok: #1e9e5c;
     --warn: #b57d1f;
     --err: #d33f4f;
@@ -670,8 +676,40 @@ html:not([data-theme]) .tool-param {
 .legal-toggles { display: flex; gap: 6px; align-items: center; }
 .login-lang { display: flex; gap: 6px; }
 
-/* 浅色下 accent 变深，用户气泡文字跟着反白 */
-html[data-theme='light'] .row.user .bubble { color: #fff; }
+/* 浅色下 accent 变深，accent 背景上的文字跟着反白 */
+html[data-theme='light'] .row.user .bubble,
+html[data-theme='light'] button.send,
+html[data-theme='light'] .recharge .pack-badge { color: #fff; }
 @media (prefers-color-scheme: light) {
-  html:not([data-theme]) .row.user .bubble { color: #fff; }
+  html:not([data-theme]) .row.user .bubble,
+  html:not([data-theme]) button.send,
+  html:not([data-theme]) .recharge .pack-badge { color: #fff; }
+}
+
+/* 窄桌面：栏宽先收缩，头部动作换行；不隐藏任何面板 */
+@media (max-width: 1100px) {
+  .tasks .panel-head { flex-wrap: wrap; }
+  .tasks .head-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* 键盘焦点始终可见；role=button 的整行控件把轮廓收进面板内 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+[role='button']:focus-visible { outline-offset: -2px; }
+
+/* 尊重系统减弱动效设置，保留状态本身，只去掉持续/位移动画 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
