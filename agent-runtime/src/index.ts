@@ -155,13 +155,19 @@ function spawnPi(sessionId: string, agent: Agent): void {
   const cwd = join(WORKSPACE_ROOT, sessionId)
   mkdirSync(cwd, { recursive: true })
 
+  // 内置扩展在 -ne 下都要显式 -e：MCP 看配置文件有无，codemode 看工具开关
+  //（--tools +codemode 只把工具加进工具集，扩展本身没加载的话工具不存在）
+  const extensions = [...EXTENSIONS]
+  if (existsSync(MCP_CONFIG)) extensions.push('builtin:mcp')
+  if (TOOLS_ADJUST.includes('+codemode')) extensions.push('builtin:codemode')
+
   const pi = new PiClient({
     cwd,
     model: agent.opts.model ?? MODEL,
     thinking: THINKING,
     systemPromptAppend: SYSTEM_APPEND,
     env: agent.opts.env,
-    extensions: existsSync(MCP_CONFIG) ? [...EXTENSIONS, 'builtin:mcp'] : EXTENSIONS,
+    extensions,
     toolsAdjust: TOOLS_ADJUST,
   })
   agent.pi = pi

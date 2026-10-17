@@ -53,9 +53,12 @@ s.on('event', ({ event: e }) => {
       }
       break
     case 'toolUsed': {
-      const action = e.message?.action ?? ''
+      // MCP 等未知工具走 detail.other,action 是 pi 原始工具名(mcp__srv__tool)。
+      // 匹配必须看这个字段 —— 匹配整个事件 JSON 会被 bash 命令文本误伤
+      const rawTool = e.detail?.other?.action ?? ''
+      const action = rawTool || e.message?.action || ''
       toolNames.add(action)
-      const hit = /mcp__|sequentialthinking/i.test(JSON.stringify(e))
+      const hit = /mcp__|sequentialthinking/i.test(rawTool)
       if (hit) mcpCalls.push(e)
       console.log(`${el()}s  ▸ [${e.status}] ${action} ${e.message?.param ?? ''}${hit ? '  ← MCP' : ''}`)
       break
@@ -67,7 +70,7 @@ function report() {
   console.log('\n──────── 断言 ────────')
   const checks = [
     ['至少一次 MCP 工具调用进入事件流', mcpCalls.length > 0],
-    ['调用成功（status=done）', mcpCalls.some((e) => e.status === 'done')],
+    ['调用成功（status=success）', mcpCalls.some((e) => e.status === 'success')],
   ]
   console.log(`  本次会话出现过的工具: ${[...toolNames].join(', ') || '(无)'}`)
   let ok = true

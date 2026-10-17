@@ -58,6 +58,11 @@ translate.ts 已兜底:toolUsed{tool:'other', detail.other.payload}
 - **不配 `MCP_SERVERS` = 完全不写文件 = 行为与现在一致**(零 if 在主链路:
   provision 里一个 `if (mcpJson) await handle.writeFile(...)` 是唯一的分叉,
   与 `PI_TOOLS_ADJUST` 同款)
+- **exposure 建议显式 `direct`**:pi 默认把 MCP 工具暴露成 `codemode`
+  (只对 codemode 脚本可见,模型工具列表里没有);`direct` 才声明给模型,
+  且每次调用独立进 `tool_execution_*` 事件流 —— 时间线可见性靠它。
+  同理 codemode 本身也是内置扩展,-ne 下光 `--tools +codemode` 不够,
+  runtime 会按 `PI_TOOLS_ADJUST` 自动补 `-e builtin:codemode`(2026-10-17 实测)
 - **格式校验归 pi**:我们不解析 mcp.json,写错 pi 会在日志里喊,
   agent 看到工具不在会自己换路 —— 不造校验层
 - **凭证在控制面 env**:JSON 里的 secret 值只在 .env / .env.production,
