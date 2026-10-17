@@ -1,6 +1,9 @@
 # Cassia all-in-one 部署：单域名同时服务前端与控制面。
 #
 # 用法：把 YOUR_DOMAIN 换成你的域名。Caddy 会自动申请 Let's Encrypt 证书。
+# 需要同时保留 IP 直连（部署/排障备用通道）时，站点地址写成两个：
+#   http://<IP>, YOUR_DOMAIN {
+# IP 地址带 http:// 前缀则只走 80，域名自动 HTTPS，两者共用同一套路由。
 #
 # 路由约定（与前端 lib/authToken.ts 的 SOCKET_URL 配合）：
 #   /socket.io/*  → socket-server :4000（事件流）
