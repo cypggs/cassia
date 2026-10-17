@@ -397,6 +397,31 @@ button.attach:disabled { opacity: .35; cursor: default; }
 .takeover.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
 .takeover:disabled { opacity: .4; cursor: default; }
 
+/* ⛶ 全屏按钮：和 takeover 同款的小按钮，挤在它左边 */
+.screen-expand {
+  margin-left: auto; flex: none; white-space: nowrap;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+  padding: 3px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+.screen-expand:hover:not(:disabled) { border-color: var(--accent); }
+.screen-expand:disabled { opacity: .4; cursor: default; }
+
+/* 全屏弹框：整屏覆盖，顶栏放状态/接管/关闭 */
+.screen-modal {
+  position: fixed; inset: 0; z-index: 40;
+  background: #000;
+  display: flex; flex-direction: column;
+}
+.screen-modal-bar { flex: none; }
+.screen-modal-host { flex: 1; }
+.screen-close {
+  flex: none;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+  width: 26px; height: 26px; border-radius: 6px; font-size: 14px; line-height: 1;
+  cursor: pointer;
+}
+.screen-close:hover { border-color: var(--err); color: var(--err); }
+
 /* noVNC 自己管画布尺寸，容器给它一个确定的可用区域就行。
    min-height:0 是必需的 —— 没有它，flex 子项会被内容撑破，
    画面溢出到面板外面。 */

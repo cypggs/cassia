@@ -113,6 +113,12 @@ const dict = {
     en: 'Hand control back and return to view-only',
     zh: '交还控制权，回到只看模式',
   },
+  'screen.expand': { en: 'Full screen', zh: '全屏' },
+  'screen.expandTitle': {
+    en: 'Open the screen in a full-screen window (Esc to close)',
+    zh: '全屏打开画面（Esc 关闭）',
+  },
+  'screen.close': { en: 'Close full screen', zh: '关闭全屏' },
   'terminal.waiting': { en: 'Waiting for the agent to run commands…', zh: '等待 Agent 执行命令…' },
   'console.hint': {
     en: 'Your own shell in the sandbox — connected as the same user as the agent, files shared. Starting…',

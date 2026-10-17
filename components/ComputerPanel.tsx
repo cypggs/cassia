@@ -341,19 +341,22 @@ function ConsoleView({
 
 type ScreenState = 'connecting' | 'connected' | 'disconnected'
 
+interface Vnc {
+  hostRef: { current: HTMLDivElement | null }
+  state: ScreenState
+  viewOnly: boolean
+  setViewOnly(v: boolean): void
+}
+
 /**
- * 画面：noVNC 直连沙箱的 websockify，**不经控制面**。
- *
- * 默认只看不操作。Agent 在干活的时候，用户的一次误点可能把它带偏，
- * 而且很难看出是自己点的还是 Agent 点的。要接管得显式按一下 ——
- * 这一下也是「这台电脑是 Agent 的，但我随时能拿回来」这个心智模型的落点。
+ * 一条 noVNC 连接的生命周期。内嵌画面和全屏弹框各持有一条
+ * （VNC 的 shared 连接，互不影响），连接/重连/接管同步逻辑共用。
  */
-function ScreenView({ vncUrl, status }: { vncUrl?: string; status?: string }) {
-  const { t } = useI18n()
+function useVnc(vncUrl: string | undefined, status: string | undefined, initialViewOnly = true): Vnc {
   const hostRef = useRef<HTMLDivElement>(null)
   const rfbRef = useRef<{ viewOnly: boolean; disconnect(): void; focus(): void } | null>(null)
   const [state, setState] = useState<ScreenState>('connecting')
-  const [takeover, setTakeover] = useState(false)
+  const [viewOnly, setViewOnly] = useState(initialViewOnly)
   /** 重连次数，用来做退避；连上就清零 */
   const retryRef = useRef(0)
 
@@ -406,9 +409,93 @@ function ScreenView({ vncUrl, status }: { vncUrl?: string; status?: string }) {
   // 接管状态单独同步：切换它不该把连接拆掉重连
   useEffect(() => {
     if (!rfbRef.current) return
-    rfbRef.current.viewOnly = !takeover
-    if (takeover) rfbRef.current.focus()
-  }, [takeover, state])
+    rfbRef.current.viewOnly = viewOnly
+    if (!viewOnly) rfbRef.current.focus()
+  }, [viewOnly, state])
+
+  return { hostRef, state, viewOnly, setViewOnly }
+}
+
+function ScreenStatusText({ status, state }: { status?: string; state: ScreenState }) {
+  const { t } = useI18n()
+  return (
+    <span className="dim">
+      {status === 'paused'
+        ? t('screen.paused')
+        : state === 'connected'
+          ? t('screen.connected')
+          : state === 'connecting'
+            ? t('screen.connecting')
+            : t('screen.reconnecting')}
+    </span>
+  )
+}
+
+/**
+ * 全屏弹框：接管后在小面板里操作浏览器太憋屈 —— ⛶ 把画面放到整屏。
+ * 独立的第二条 shared VNC 连接，内嵌画面不受影响；Esc 或 × 关闭。
+ * 打开时继承内嵌画面的接管状态（接管着全屏 = 全屏可操控）。
+ */
+function ScreenModal({
+  vncUrl,
+  status,
+  initialViewOnly,
+  onClose,
+}: {
+  vncUrl: string
+  status?: string
+  initialViewOnly: boolean
+  onClose(): void
+}) {
+  const { t } = useI18n()
+  const vnc = useVnc(vncUrl, status, initialViewOnly)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // 接管时 noVNC 画布持有键鼠焦点，事件在到达 window 前就被它吃掉 —
+        // 用捕获阶段监听，保证 Esc 一定能关掉弹框
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="screen-modal" role="dialog" aria-modal="true" aria-label={t('tab.screen')}>
+      <div className="screen-bar screen-modal-bar">
+        <span className={`dot ${status === 'paused' ? 'paused' : vnc.state}`} />
+        <ScreenStatusText status={status} state={vnc.state} />
+        <button
+          className={vnc.viewOnly ? 'takeover' : 'takeover on'}
+          onClick={() => vnc.setViewOnly(!vnc.viewOnly)}
+          disabled={vnc.state !== 'connected'}
+          title={vnc.viewOnly ? t('screen.takeoverTitle') : t('screen.releaseTitle')}
+        >
+          {vnc.viewOnly ? t('screen.takeover') : t('screen.release')}
+        </button>
+        <button className="screen-close" onClick={onClose} title={t('screen.close')}>
+          ×
+        </button>
+      </div>
+      <div className="screen-host screen-modal-host" ref={vnc.hostRef} />
+    </div>
+  )
+}
+
+/**
+ * 画面：noVNC 直连沙箱的 websockify，**不经控制面**。
+ *
+ * 默认只看不操作。Agent 在干活的时候，用户的一次误点可能把它带偏，
+ * 而且很难看出是自己点的还是 Agent 点的。要接管得显式按一下 ——
+ * 这一下也是「这台电脑是 Agent 的，但我随时能拿回来」这个心智模型的落点。
+ */
+function ScreenView({ vncUrl, status }: { vncUrl?: string; status?: string }) {
+  const { t } = useI18n()
+  const vnc = useVnc(vncUrl, status)
+  const [expanded, setExpanded] = useState(false)
 
   if (!vncUrl) {
     return (
@@ -422,26 +509,34 @@ function ScreenView({ vncUrl, status }: { vncUrl?: string; status?: string }) {
   return (
     <div className="screen-wrap">
       <div className="screen-bar">
-        <span className={`dot ${status === 'paused' ? 'paused' : state}`} />
-        <span className="dim">
-          {status === 'paused'
-            ? t('screen.paused')
-            : state === 'connected'
-              ? t('screen.connected')
-              : state === 'connecting'
-                ? t('screen.connecting')
-                : t('screen.reconnecting')}
-        </span>
+        <span className={`dot ${status === 'paused' ? 'paused' : vnc.state}`} />
+        <ScreenStatusText status={status} state={vnc.state} />
         <button
-          className={takeover ? 'takeover on' : 'takeover'}
-          onClick={() => setTakeover((v) => !v)}
-          disabled={state !== 'connected'}
-          title={takeover ? t('screen.releaseTitle') : t('screen.takeoverTitle')}
+          className="screen-expand"
+          onClick={() => setExpanded(true)}
+          disabled={vnc.state !== 'connected'}
+          title={t('screen.expandTitle')}
         >
-          {takeover ? t('screen.release') : t('screen.takeover')}
+          {t('screen.expand')}
+        </button>
+        <button
+          className={vnc.viewOnly ? 'takeover' : 'takeover on'}
+          onClick={() => vnc.setViewOnly(!vnc.viewOnly)}
+          disabled={vnc.state !== 'connected'}
+          title={vnc.viewOnly ? t('screen.takeoverTitle') : t('screen.releaseTitle')}
+        >
+          {vnc.viewOnly ? t('screen.takeover') : t('screen.release')}
         </button>
       </div>
-      <div className="screen-host" ref={hostRef} />
+      <div className="screen-host" ref={vnc.hostRef} />
+      {expanded && (
+        <ScreenModal
+          vncUrl={vncUrl}
+          status={status}
+          initialViewOnly={vnc.viewOnly}
+          onClose={() => setExpanded(false)}
+        />
+      )}
     </div>
   )
 }
