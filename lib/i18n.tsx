@@ -86,6 +86,7 @@ const dict = {
   // ── 右侧计算环境 ──
   'tab.screen': { en: 'Screen', zh: '画面' },
   'tab.terminal': { en: 'Terminal', zh: '终端' },
+  'tab.console': { en: 'Console', zh: 'Console' },
   'tab.files': { en: 'Files', zh: '文件' },
   'screen.sandboxId': { en: 'Sandbox ID', zh: '沙箱 ID' },
   'screen.emptyTitle': { en: 'No graphical environment in this run.', zh: '本次运行没有图形环境。' },
@@ -111,6 +112,14 @@ const dict = {
     zh: '交还控制权，回到只看模式',
   },
   'terminal.waiting': { en: 'Waiting for the agent to run commands…', zh: '等待 Agent 执行命令…' },
+  'console.hint': {
+    en: 'Your own shell in the sandbox — connected as the same user as the agent, files shared. Starting…',
+    zh: '沙箱里的独立 shell —— 与 Agent 同一用户、文件互通。正在启动…',
+  },
+  'console.exited': {
+    en: '[shell exited — press any key to reopen]',
+    zh: '[shell 已退出 —— 按任意键重新打开]',
+  },
 
   // ── 文件面板 ──
   'files.workspace': { en: 'Workspace files', zh: '工作区文件' },

@@ -1,9 +1,11 @@
 import { createServer } from 'node:http'
-import { existsSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
+import * as pty from 'node-pty'
 import type { AgentEvent } from '@cassia/shared'
 import { PiClient } from './pi-client.js'
 import { Translator } from './translate.js'
@@ -23,8 +25,13 @@ import { Translator } from './translate.js'
  * 上行（控制面 → runtime）：
  *   {type:'attach', sessionId, model?, env?}   ← 必须先发，后续消息都归属这个会话
  *   {type:'prompt', text}  {type:'steer', text}  {type:'abort'}  {type:'bash', command}
+ *   {type:'console_start', cols, rows}  {type:'console_input', data}
+ *   {type:'console_resize', cols, rows}  {type:'console_close'}
+ *     ← console_* 是用户的独立 shell（node-pty 真 PTY，和 pi 的 persistent-shell
+ *       完全隔离），控制字符（Ctrl-C 等）原样透传，输出按原始字节广播。
  * 下行（runtime → 控制面）：
  *   {type:'event', event: AgentEvent}
+ *   {type:'console', data}  {type:'console_exit', code}
  */
 
 const PORT = Number(process.env.PORT ?? 8330)
@@ -124,6 +131,61 @@ function broadcast(sessionId: string, event: AgentEvent): void {
   for (const ws of a.clients) {
     if (ws.readyState === ws.OPEN) ws.send(frame)
   }
+}
+
+// ── Console：用户独立 shell ────────────────────────────────────────────
+//
+// 每会话一个 node-pty，bash 交互式，cwd 是会话工作区（和 pi 同目录，
+// 文件互通）。和 Agent 的 persistent-shell 是两条完全独立的 PTY ——
+// 那边有 stty -echo、命令队列、PROMPT_COMMAND 完成标记，用户按键
+// 进去会把 Agent 的节奏打乱。lazy 创建，console_close 或 shell 自己
+// exit 后清出 map，下次 start 重建。
+
+const consoles = new Map<string, pty.IPty>()
+
+// pnpm 解包会剥掉 node-pty spawn-helper 的执行位（已知问题：npm 保留、pnpm 不保留），
+// 没 +x 时 pty.fork 直接报 posix_spawnp failed。启动时把原生二进制旁边
+// （prebuilds/<plat>-<arch> 或源码编译的 build/Release）的 helper 补回 755，幂等。
+try {
+  const pkgDir = dirname(createRequire(import.meta.url).resolve('node-pty/package.json'))
+  for (const dir of ['build/Release', `prebuilds/${process.platform}-${process.arch}`]) {
+    try {
+      chmodSync(join(pkgDir, dir, 'spawn-helper'), 0o755)
+    } catch { /* 该布局下没有这个文件就跳过 */ }
+  }
+} catch { /* 解析不到 node-pty 包路径也不挡 runtime 启动 */ }
+
+/** 下行广播一条 console 帧（所有 attached 的 ws 都收到，多标签页共享一个 shell） */
+function broadcastConsole(sessionId: string, frame: Record<string, unknown>): void {
+  const a = agents.get(sessionId)
+  if (!a) return
+  const raw = JSON.stringify(frame)
+  for (const ws of a.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(raw)
+  }
+}
+
+function consoleStart(sessionId: string, cols: number, rows: number): void {
+  const existing = consoles.get(sessionId)
+  if (existing) {
+    existing.resize(Math.max(cols, 2), Math.max(rows, 2))
+    return
+  }
+  const cwd = join(WORKSPACE_ROOT, sessionId)
+  mkdirSync(cwd, { recursive: true })
+  const shell = pty.spawn('/bin/bash', [], {
+    name: 'xterm-256color',
+    cols: Math.max(cols, 2),
+    rows: Math.max(rows, 2),
+    cwd,
+    env: { ...process.env, TERM: 'xterm-256color' } as Record<string, string>,
+  })
+  consoles.set(sessionId, shell)
+  shell.onData((data) => broadcastConsole(sessionId, { type: 'console', data }))
+  shell.onExit(({ exitCode }) => {
+    consoles.delete(sessionId)
+    broadcastConsole(sessionId, { type: 'console_exit', code: exitCode })
+  })
 }
 
 function getAgent(sessionId: string, opts: AttachOpts = {}): Agent {
@@ -331,6 +393,9 @@ wss.on('connection', (ws) => {
       command?: string
       model?: string
       env?: Record<string, string>
+      data?: string
+      cols?: number
+      rows?: number
     }
     try {
       msg = JSON.parse(raw.toString())
@@ -372,6 +437,26 @@ wss.on('connection', (ws) => {
       case 'bash':
         if (msg.command) pi.bash(msg.command)
         break
+      case 'console_start':
+        consoleStart(sessionId, Number(msg.cols) || 80, Number(msg.rows) || 24)
+        break
+      case 'console_input': {
+        // data 是原始按键字节（含 \x03 这类控制字符），原样写进 PTY
+        if (typeof msg.data !== 'string') break
+        consoles.get(sessionId)?.write(msg.data)
+        break
+      }
+      case 'console_resize': {
+        const c = consoles.get(sessionId)
+        if (c) c.resize(Number(msg.cols) || 80, Number(msg.rows) || 24)
+        break
+      }
+      case 'console_close': {
+        const c = consoles.get(sessionId)
+        consoles.delete(sessionId)
+        c?.kill()
+        break
+      }
     }
   })
 
@@ -387,6 +472,7 @@ server.listen(PORT, () => {
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     for (const a of agents.values()) a.pi.stop()
+    for (const c of consoles.values()) c.kill()
     server.close(() => process.exit(0))
   })
 }

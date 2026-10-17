@@ -297,7 +297,15 @@ function Workspace({
         </div>
       </div>
 
-      <ComputerPanel events={os.events} sessionId={os.sessionId} />
+      <ComputerPanel
+        events={os.events}
+        sessionId={os.sessionId}
+        subscribeConsole={os.subscribeConsole}
+        consoleStart={os.consoleStart}
+        consoleInput={os.consoleInput}
+        consoleResize={os.consoleResize}
+        consoleClose={os.consoleClose}
+      />
 
       {checkoutToast && <div className="toast">{t('recharge.successToast')}</div>}
       {loadErrorToast && <div className="toast">{t('error.loadSession')}</div>}

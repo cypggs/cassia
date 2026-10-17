@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentEvent, SandboxUpdateEvent, TerminalDetail, TextEditorDetail, ToolUsedEvent } from '@cassia/shared'
 import { SOCKET_URL } from '@/lib/useCassia'
 import { authHeaders, downloadSessionFile } from '@/lib/commercial/authToken'
@@ -17,9 +17,17 @@ import { useI18n, type I18nKey } from '@/lib/i18n'
  * 画面排第一个：看到 Agent 亲手操作浏览器是这个产品最直观的情绪价值。
  */
 
-type Tab = 'screen' | 'terminal' | 'files'
+type Tab = 'screen' | 'terminal' | 'console' | 'files'
 
-export function ComputerPanel({ events, sessionId }: { events: AgentEvent[]; sessionId: string | null }) {
+export interface ConsoleOps {
+  subscribeConsole: (onData: (data: string) => void, onExit?: () => void) => () => void
+  consoleStart: (sessionId: string, cols: number, rows: number) => void
+  consoleInput: (sessionId: string, data: string) => void
+  consoleResize: (sessionId: string, cols: number, rows: number) => void
+  consoleClose: (sessionId: string) => void
+}
+
+export function ComputerPanel({ events, sessionId, ...consoleOps }: { events: AgentEvent[]; sessionId: string | null } & ConsoleOps) {
   const { t } = useI18n()
   const [tab, setTab] = useState<Tab>('screen')
   const sandbox = lastSandboxUpdate(events)
@@ -33,6 +41,9 @@ export function ComputerPanel({ events, sessionId }: { events: AgentEvent[]; ses
           </button>
           <button className={tab === 'terminal' ? 'tab on' : 'tab'} onClick={() => setTab('terminal')}>
             {t('tab.terminal')}
+          </button>
+          <button className={tab === 'console' ? 'tab on' : 'tab'} onClick={() => setTab('console')}>
+            {t('tab.console')}
           </button>
           <button className={tab === 'files' ? 'tab on' : 'tab'} onClick={() => setTab('files')}>
             {t('tab.files')}
@@ -58,6 +69,9 @@ export function ComputerPanel({ events, sessionId }: { events: AgentEvent[]; ses
         </div>
         <div className={tab === 'terminal' ? 'view' : 'view off'}>
           <TerminalView events={events} sessionId={sessionId} active={tab === 'terminal'} />
+        </div>
+        <div className={tab === 'console' ? 'view' : 'view off'}>
+          <ConsoleView sessionId={sessionId} active={tab === 'console'} {...consoleOps} />
         </div>
         <div className={tab === 'files' ? 'view' : 'view off'}>
           <FilesView events={events} sessionId={sessionId} />
@@ -195,6 +209,134 @@ function terminalDetail(e: ToolUsedEvent): TerminalDetail | null {
   const d = e.detail
   if (d && 'terminal' in d) return d.terminal
   return null
+}
+
+/**
+ * Console：用户直接操作的独立 shell（沙箱里每会话一个 node-pty）。
+ *
+ * 和 Terminal 的本质区别：Terminal 是 Agent 事件的只读回放，这里注册了
+ * term.onData —— 每个按键、每次 Ctrl-C 原样写进 PTY，是真交互。
+ * shell 与 Agent 的 persistent-shell 完全隔离，但 cwd 是同一会话工作区，
+ * 文件互通。输出是瞬时字节流（console_data 事件），不写进 events 持久化。
+ */
+function ConsoleView({
+  sessionId,
+  active,
+  subscribeConsole,
+  consoleStart,
+  consoleInput,
+  consoleResize,
+  consoleClose,
+}: { sessionId: string | null; active: boolean } & ConsoleOps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<{ write(s: string): void; reset(): void; dispose(): void; onData(cb: (d: string) => void): void; onResize(cb: (e: { cols: number; rows: number }) => void): void } | null>(null)
+  const fitRef = useRef<{ fit(): void } | null>(null)
+  const [ready, setReady] = useState(false)
+  /** 已为哪个会话启动过 shell（null = 未启动/已退出） */
+  const startedForRef = useRef<string | null>(null)
+  const { t } = useI18n()
+
+  const start = useCallback(() => {
+    const sid = sessionId
+    if (!sid || !fitRef.current) return
+    const dims = fitRef.current as unknown as { proposeDimensions(): { cols: number; rows: number } | undefined }
+    const d = dims.proposeDimensions?.()
+    consoleStart(sid, d?.cols ?? 80, d?.rows ?? 24)
+    startedForRef.current = sid
+  }, [sessionId, consoleStart])
+
+  useEffect(() => {
+    let disposed = false
+    let fit: { fit(): void } | null = null
+
+    ;(async () => {
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import('@xterm/xterm'),
+        import('@xterm/addon-fit'),
+      ])
+      if (disposed || !hostRef.current) return
+
+      const term = new Terminal({
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: 12.5,
+        lineHeight: 1.35,
+        convertEol: true,
+        cursorBlink: true,
+        theme: {
+          background: '#0e1116',
+          foreground: '#c9d1d9',
+          selectionBackground: '#264f78',
+        },
+      })
+      const fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+      term.open(hostRef.current)
+      fitAddon.fit()
+      fit = fitAddon
+      fitRef.current = fitAddon
+      termRef.current = term as unknown as typeof termRef.current
+
+      // 每个按键/控制字符直达沙箱 PTY；shell 退出后（startedFor 清空）
+      // 第一次按键负责重开 —— 「按任意键重开」
+      term.onData((d) => {
+        const sid = startedForRef.current
+        if (sid) consoleInput(sid, d)
+        else start()
+      })
+      term.onResize(({ cols, rows }) => {
+        const sid = startedForRef.current
+        if (sid) consoleResize(sid, cols, rows)
+      })
+      setReady(true)
+    })()
+
+    const onResize = () => fit?.fit()
+    window.addEventListener('resize', onResize)
+    return () => {
+      disposed = true
+      window.removeEventListener('resize', onResize)
+      termRef.current?.dispose()
+      termRef.current = null
+      fitRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 订阅沙箱回传的原始字节；shell 退出写一行提示，等按键重开
+  useEffect(() => {
+    if (!ready) return
+    return subscribeConsole(
+      (data) => termRef.current?.write(data),
+      () => {
+        startedForRef.current = null
+        termRef.current?.write(`\r\n\x1b[90m${t('console.exited')}\x1b[0m\r\n`)
+      },
+    )
+  }, [ready, subscribeConsole, t])
+
+  // 隐藏时容器尺寸是 0，那会儿 fit() 会把终端算成 0 列。
+  // 等它重新可见了再量一次；尺寸变化同步给 PTY（onResize 会接着发）
+  useEffect(() => {
+    if (active) fitRef.current?.fit()
+  }, [active])
+
+  // 切换会话 → 关掉旧 shell、清屏重来；首次点开由 onData 或下方 effect 启动
+  useEffect(() => {
+    if (startedForRef.current && startedForRef.current !== sessionId) {
+      consoleClose(startedForRef.current)
+    }
+    startedForRef.current = null
+    termRef.current?.reset()
+    termRef.current?.write(`\x1b[90m${t('console.hint')}\x1b[0m\r\n`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
+
+  // 首次可见（或换会话后首次可见）直接启动，不用等按键
+  useEffect(() => {
+    if (active && ready && sessionId && startedForRef.current !== sessionId) start()
+  }, [active, ready, sessionId, start])
+
+  return <div className="term-host" ref={hostRef} />
 }
 
 type ScreenState = 'connecting' | 'connected' | 'disconnected'

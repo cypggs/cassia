@@ -63,13 +63,16 @@ export class RuntimeBridge extends EventEmitter {
     ws.on('message', (raw) => {
       // 任何下行数据都证明连接是活的
       this.waitingPong = false
-      let msg: { type?: string; event?: AgentEvent }
+      let msg: { type?: string; event?: AgentEvent; data?: string; code?: number }
       try {
         msg = JSON.parse(raw.toString())
       } catch {
         return
       }
       if (msg.type === 'event' && msg.event) this.emit('event', msg.event)
+      // console 帧是用户独立 shell 的原始字节/退出码，转发给 Socket.IO 层
+      else if (msg.type === 'console' && typeof msg.data === 'string') this.emit('console', msg.data)
+      else if (msg.type === 'console_exit') this.emit('console_exit', msg.code ?? 0)
     })
     ws.on('pong', () => {
       this.waitingPong = false
@@ -134,6 +137,22 @@ export class RuntimeBridge extends EventEmitter {
 
   abort(): boolean {
     return this.send({ type: 'abort' })
+  }
+
+  consoleStart(cols: number, rows: number): boolean {
+    return this.send({ type: 'console_start', cols, rows })
+  }
+
+  consoleInput(data: string): boolean {
+    return this.send({ type: 'console_input', data })
+  }
+
+  consoleResize(cols: number, rows: number): boolean {
+    return this.send({ type: 'console_resize', cols, rows })
+  }
+
+  consoleClose(): boolean {
+    return this.send({ type: 'console_close' })
   }
 
   close(): void {

@@ -76,6 +76,14 @@ export function useCassia() {
         lastIdRef.current = undefined
       }
     })
+    // Console（用户独立 shell）的原始字节 —— 瞬时流，绝不进 applyEvents/
+    // 持久化，只转给已订阅的视图（ConsoleView 挂载期间）
+    s.on('console_data', ({ data }: { sessionId: string; data: string }) => {
+      for (const cb of consoleListenersRef.current) cb(data)
+    })
+    s.on('console_exited', () => {
+      for (const cb of consoleExitListenersRef.current) cb()
+    })
 
     return () => {
       s.close()
@@ -214,6 +222,36 @@ export function useCassia() {
     if (sid) socketRef.current?.emit('abort', { sessionId: sid })
   }, [])
 
+  // ── Console：用户独立 shell。订阅是 listener set（ConsoleView 挂载期间
+  // 注册），发送方法直接透传 sessionId（切换会话时视图自己会 close 旧的）。
+  const consoleListenersRef = useRef(new Set<(data: string) => void>())
+  const consoleExitListenersRef = useRef(new Set<() => void>())
+
+  const subscribeConsole = useCallback((onData: (data: string) => void, onExit?: () => void) => {
+    consoleListenersRef.current.add(onData)
+    if (onExit) consoleExitListenersRef.current.add(onExit)
+    return () => {
+      consoleListenersRef.current.delete(onData)
+      if (onExit) consoleExitListenersRef.current.delete(onExit)
+    }
+  }, [])
+
+  const consoleStart = useCallback((sessionId: string, cols: number, rows: number) => {
+    socketRef.current?.emit('console_start', { sessionId, cols, rows })
+  }, [])
+
+  const consoleInput = useCallback((sessionId: string, data: string) => {
+    socketRef.current?.emit('console_input', { sessionId, data })
+  }, [])
+
+  const consoleResize = useCallback((sessionId: string, cols: number, rows: number) => {
+    socketRef.current?.emit('console_resize', { sessionId, cols, rows })
+  }, [])
+
+  const consoleClose = useCallback((sessionId: string) => {
+    socketRef.current?.emit('console_close', { sessionId })
+  }, [])
+
   // 钱包/充值是可选商业模块(lib/commercial/useWallet.ts),这里只组合
   const getSocket = useCallback(() => socketRef.current, [])
   const { wallet, rechargeOpen, setRechargeOpen, createCheckout, refreshWallet } =
@@ -231,6 +269,7 @@ export function useCassia() {
     connected, sessions, sessionId, events, status,
     newSession, openSession, send, steer, abort, upload,
     renameSession, togglePin, deleteSession,
+    subscribeConsole, consoleStart, consoleInput, consoleResize, consoleClose,
     wallet, sessionCredits, createCheckout, refreshWallet,
     rechargeOpen, setRechargeOpen, loadError,
   }

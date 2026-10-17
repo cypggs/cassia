@@ -18,6 +18,7 @@
     "test:upload": "node scripts/e2e-upload.mjs",
     "test:plan": "node scripts/e2e-plan.mjs",
     "test:shell": "node scripts/e2e-shell.mjs",
+    "test:console": "node scripts/e2e-console.mjs",
     "test:chaos": "node --env-file=.env scripts/e2e-chaos.mjs",
     "bump-pi": "node scripts/bump-pi.mjs",
     "test:auth": "node --env-file=.env scripts/e2e-auth.mjs",

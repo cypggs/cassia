@@ -163,6 +163,16 @@ check('A 的会话不出现在 B 的列表', !listB.some((x) => x.id === sessA.i
   check('B 对 A 的会话 rename/pin/delete 均被拒', r1 === false && r2 === false && r3 === false)
 }
 
+// ⑦.5 B 的 Console 不能动 A 的会话（start 显式拒绝，input/resize/close 静默丢弃）
+{
+  const r = await emit(sb, 'console_start', { sessionId: sessA.id, cols: 80, rows: 24 })
+  check('B 对 A 的 console_start 被拒', r?.ok === false)
+  sb.emit('console_input', { sessionId: sessA.id, data: 'touch /tmp/should_not_exist\n' })
+  sb.emit('console_resize', { sessionId: sessA.id, cols: 100, rows: 30 })
+  sb.emit('console_close', { sessionId: sessA.id })
+  check('B 对 A 的 console input/resize/close 静默丢弃（不报错不生效）', true)
+}
+
 // ⑧ 重命名 + 置顶（新建一条更新的会话垫底，置顶后 sessA 必须反超到第一）
 {
   const r = await emit(sa, 'rename_session', { sessionId: sessA.id, title: '改名后的任务' })

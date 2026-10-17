@@ -52,6 +52,8 @@ interface Live {
    * 沙箱本体还在（全内存快照），下次活跃时 resume 原地醒来。
    */
   dormant: boolean
+  /** 用户 Console（独立 shell）是否开着 —— 开着期间同样要保活沙箱 */
+  consoleActive: boolean
 }
 const live = new Map<string, Live>()
 /** 同一会话的并发 provision 去重 —— 用户连点两下不该起两个沙箱 */
@@ -364,6 +366,17 @@ function openBridge(sessionId: string, handle: RuntimeHandle): RuntimeBridge {
     emit(sessionId, e)
   })
   bridge.on('warn', (m: string) => console.warn(`[${sessionId}] ${m}`))
+  // Console（用户独立 shell）的原始字节/退出码 —— 瞬时消息，不落库，
+  // 直接广播给该会话房间里的所有浏览器（多标签页共享同一个 shell）
+  bridge.on('console', (data: string) => {
+    touch(sessionId)
+    io.to(sessionId).emit('console_data', { sessionId, data })
+  })
+  bridge.on('console_exit', (code: number) => {
+    const l = live.get(sessionId)
+    if (l) l.consoleActive = false
+    io.to(sessionId).emit('console_exited', { sessionId, code })
+  })
   // 沙箱被外部暂停/回收后 bridge 会 502 空转 —— 收到不可达信号就诚实标记
   // 休眠，下条消息走 ensureRuntime 的 resume 分支原地唤醒
   bridge.on('unreachable', () => {
@@ -424,7 +437,7 @@ async function ensureRuntime(sessionId: string): Promise<Live> {
             status: 'running',
           })
           const bridge = openBridge(sessionId, handle)
-          const l: Live = { handle, bridge, lastActive: Date.now(), agentRunning: false, dormant: false }
+          const l: Live = { handle, bridge, lastActive: Date.now(), agentRunning: false, dormant: false, consoleActive: false }
           live.set(sessionId, l)
           return l
         } catch (e) {
@@ -450,7 +463,7 @@ async function ensureRuntime(sessionId: string): Promise<Live> {
 
     const bridge = openBridge(sessionId, handle)
 
-    const l: Live = { handle, bridge, lastActive: Date.now(), agentRunning: false, dormant: false }
+    const l: Live = { handle, bridge, lastActive: Date.now(), agentRunning: false, dormant: false, consoleActive: false }
     live.set(sessionId, l)
     return l
   })()
@@ -514,6 +527,7 @@ function touch(sessionId: string): void {
 function markDormant(sessionId: string, l: Live): void {
   if (l.dormant) return
   l.dormant = true
+  l.consoleActive = false
   l.bridge?.close()
   l.bridge = null
   console.log(`[${sessionId}] 休眠 sandbox=${l.handle.sandboxId}`)
@@ -571,7 +585,7 @@ reaper.unref()
  */
 const heartbeat = setInterval(() => {
   for (const l of live.values()) {
-    if (!l.dormant && l.agentRunning) l.handle.touch()
+    if (!l.dormant && (l.agentRunning || l.consoleActive)) l.handle.touch()
   }
 }, 60_000)
 heartbeat.unref()
@@ -681,6 +695,49 @@ io.on('connection', (socket) => {
   socket.on('abort', async (p: { sessionId: string }) => {
     if (!(await commercial.owns(userId, p.sessionId))) return
     live.get(p.sessionId)?.bridge?.abort()
+  })
+
+  // ── Console：用户独立 shell（每会话一个 node-pty，在沙箱 runtime 里）。
+  // 每个 handler 都过 owns() —— 跨用户的 input/resize/close 一律拒绝。
+  // console_start 走 ensureRuntime：沙箱睡了会透明唤醒，点开即用。
+  socket.on('console_start', async (p: { sessionId: string; cols?: number; rows?: number }, ack?: (r: { ok: boolean }) => void) => {
+    if (!(await commercial.owns(userId, p.sessionId))) return ack?.({ ok: false })
+    try {
+      const { bridge } = await ensureRuntime(p.sessionId)
+      // ensureRuntime 成功后 bridge 必然已建好（dormant=false 的 Live 不可能有空 bridge），
+      // 但 connect 是异步的 —— WS 可能还没握手完，send 会静默丢，重试到发出去为止
+      if (!bridge || !(await waitAndSend(() => bridge.consoleStart(Number(p.cols) || 80, Number(p.rows) || 24)))) {
+        throw new Error('console_start 发送失败（bridge 未就绪）')
+      }
+      live.get(p.sessionId)!.consoleActive = true
+      ack?.({ ok: true })
+    } catch (e) {
+      console.warn(`[${p.sessionId}] console_start 失败:`, e instanceof Error ? e.message : e)
+      ack?.({ ok: false })
+    }
+  })
+
+  socket.on('console_input', async (p: { sessionId: string; data?: string }) => {
+    if (!(await commercial.owns(userId, p.sessionId))) return
+    if (typeof p.data !== 'string') return
+    const l = live.get(p.sessionId)
+    if (!l || l.dormant || !l.bridge) return
+    if (l.bridge.consoleInput(p.data)) touch(p.sessionId)
+  })
+
+  socket.on('console_resize', async (p: { sessionId: string; cols?: number; rows?: number }) => {
+    if (!(await commercial.owns(userId, p.sessionId))) return
+    const l = live.get(p.sessionId)
+    if (!l || l.dormant || !l.bridge) return
+    l.bridge.consoleResize(Number(p.cols) || 80, Number(p.rows) || 24)
+  })
+
+  socket.on('console_close', async (p: { sessionId: string }) => {
+    if (!(await commercial.owns(userId, p.sessionId))) return
+    const l = live.get(p.sessionId)
+    if (!l) return
+    l.consoleActive = false
+    l.bridge?.consoleClose()
   })
 
   // 商业化 socket handlers（钱包/收银台/e2e 后门）。Noop 版不注册任何东西。
