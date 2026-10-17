@@ -35,15 +35,20 @@
 ## v1 方案(约 20 行)
 
 ```
-控制面 .env:  MCP_SERVERS='{"db":{"command":"npx","args":["-y","@x/mcp-db"],
-                              "env":{"PGURL":"..."}},
-                              "api":{"url":"https://mcp.example.com/sse"}}'
+控制面 .env:  MCP_SERVERS='{"mcpServers":{"db":{"command":"npx",
+                              "args":["-y","@x/mcp-db"],"env":{"PGURL":"..."}},
+                              "api":{"url":"https://mcp.example.com/mcp"}}}'
                      │
 provision 时(沙箱健康检查后、attach 前)
                      ▼
 沙箱 ~/.pi/agent/mcp.json  ←  sbx.files.write(原文透传,格式归 pi 管)
-                     │
-pi 启动(--no-extensions 不影响 MCP;MCP 是 pi 内核管的,不是扩展)
+                     │      注意是 {"mcpServers":{...}} 包裹格式,与
+                     │      其它 MCP client 一致,不是裸 map
+                     ▼
+pi 启动时必须显式 -e builtin:mcp —— MCP 是 pi 的**内置扩展**,
+--no-extensions 会连它一起禁掉(2026-10-17 实测:pi mcp list 显示
+connected,但会话里没有 mcp__ 工具)。runtime 检测 mcp.json 存在
+才追加这个 -e;检测在 spawn 时做,不能在模块加载时(那时还没写文件)
                      ▼
 mcp__db__query 等工具进入 tool_execution_* 事件流
                      ▼
@@ -79,6 +84,9 @@ translate.ts 已兜底:toolUsed{tool:'other', detail.other.payload}
 
 ## 验证
 
-1. 本地:`.env` 配一个公开 MCP(如 `npx -y @modelcontextprotocol/server-everything`?no —— 用最小的真实 server),create session → 问 agent「你有哪些工具」→ 时间线出现 `mcp__` 前缀的 toolUsed
+1. `scripts/e2e-mcp.mjs`（打线上:`SOCKET_URL=http://<host> node scripts/e2e-mcp.mjs`）:
+   真实会话里要求 agent 调 `sequentialthinking_tools`,断言事件流出现
+   `mcp__` 工具调用且成功。测试 server 用 mcp.so 的
+   `mcp-sequentialthinking-tools`(npx 起,无 key)
 2. `PI_TOOLS_ADJUST='-mcp__*'`(负向通配)应能整体关掉 —— 验证 `--no-mcp` 等效路径
 3. chaos 回归不动(MCP 未配置时零影响)

@@ -84,6 +84,16 @@ const SHELL_EXTENSION = fileURLToPath(new URL('../pi-extension/persistent-shell.
 const PLAN_EXTENSION = fileURLToPath(new URL('../pi-extension/plan.ts', import.meta.url))
 const EXTENSIONS = [SHELL_EXTENSION, PLAN_EXTENSION].filter(existsSync)
 
+/**
+ * 控制面 provision 时写入的 MCP 配置（docs/12）。MCP 是 pi 的**内置扩展**，
+ * --no-extensions 会连它一起禁掉（实测：pi mcp list 连得上，会话里却没工具），
+ * 所以要显式 -e builtin:mcp 加回来。
+ *
+ * 检测必须放在 spawnPi 里而不是模块加载时：runtime 随沙箱开机启动，
+ * 那时控制面还没写 mcp.json；attach 首次 spawn 时文件才已就位。
+ */
+const MCP_CONFIG = join(homedir(), '.pi/agent/mcp.json')
+
 interface Agent {
   pi: PiClient
   translator: Translator
@@ -151,7 +161,7 @@ function spawnPi(sessionId: string, agent: Agent): void {
     thinking: THINKING,
     systemPromptAppend: SYSTEM_APPEND,
     env: agent.opts.env,
-    extensions: EXTENSIONS,
+    extensions: existsSync(MCP_CONFIG) ? [...EXTENSIONS, 'builtin:mcp'] : EXTENSIONS,
     toolsAdjust: TOOLS_ADJUST,
   })
   agent.pi = pi

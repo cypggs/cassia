@@ -31,7 +31,8 @@ export interface PiClientOptions {
   /**
    * 显式加载的 pi 扩展路径（`-e`）。和 `--no-extensions` 不冲突 ——
    * 后者只是不自动发现，显式给的照加载。
-   * 目前只有一个：persistent-shell（把 bash 落到常驻 PTY 上）。
+   * 接受文件路径或 `builtin:<name>`：MCP 是内置扩展，`-ne` 会连它
+   * 一起禁掉，配了 MCP 的会话要显式给 `builtin:mcp` 加回来。
    */
   extensions?: string[]
 }
