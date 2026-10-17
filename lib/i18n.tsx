@@ -88,6 +88,8 @@ const dict = {
   'tab.terminal': { en: 'Terminal', zh: '终端' },
   'tab.console': { en: 'Console', zh: 'Console' },
   'tab.files': { en: 'Files', zh: '文件' },
+  'nav.collapse': { en: 'Collapse sidebar', zh: '收起侧边栏' },
+  'nav.expand': { en: 'Expand sidebar', zh: '展开侧边栏' },
   'screen.sandboxId': { en: 'Sandbox ID', zh: '沙箱 ID' },
   'screen.emptyTitle': { en: 'No graphical environment in this run.', zh: '本次运行没有图形环境。' },
   'screen.emptyBody': {

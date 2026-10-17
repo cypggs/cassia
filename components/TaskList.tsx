@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { SessionSummary } from '@cassia/shared'
 import { LangToggle, useI18n } from '@/lib/i18n'
 import { ThemeToggle } from '@/lib/theme'
@@ -21,6 +21,8 @@ export function TaskList({
   balance,
   sessionCredits,
   onTopUp,
+  onCollapse,
+  gutter,
 }: {
   sessions: SessionSummary[]
   current: string | null
@@ -38,6 +40,10 @@ export function TaskList({
   /** 当前会话累计消耗（积分）；只有当前行显示 */
   sessionCredits?: number
   onTopUp?(): void
+  /** 折叠侧边栏 */
+  onCollapse?(): void
+  /** 右缘分隔条（拖动改栏宽），由父级渲染传入 */
+  gutter?: ReactNode
 }) {
   const { t } = useI18n()
   /** 行内重命名中的会话 */
@@ -59,6 +65,11 @@ export function TaskList({
           <i className={connected ? 'led on' : 'led'} title={connected ? t('nav.connected') : t('nav.disconnected')} />
         </span>
         <span className="head-actions">
+          {onCollapse && (
+            <button className="side-toggle" onClick={onCollapse} title={t('nav.collapse')}>
+              «
+            </button>
+          )}
           <ThemeToggle />
           <LangToggle />
           <button className="new" onClick={onNew}>
@@ -74,6 +85,7 @@ export function TaskList({
             role="button"
             tabIndex={0}
             className={s.id === current ? 'task on' : 'task'}
+            title={s.title}
             onClick={() => onOpen(s.id)}
             onKeyDown={(e) => e.key === 'Enter' && onOpen(s.id)}
           >
@@ -155,6 +167,7 @@ export function TaskList({
         </div>
       )}
       <SiteFooter />
+      {gutter}
 
       {confirming && (
         <div className="modal-overlay" onClick={() => setConfirming(null)}>

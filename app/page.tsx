@@ -135,6 +135,121 @@ function Workspace({
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<PendingFile[]>([])
   const pickerRef = useRef<HTMLInputElement>(null)
+
+  // ── 三栏布局：折叠态 + 两条可拖分隔条 ──
+  // 列宽存在 .layout 的内联 CSS 变量里（--side-w / --right-w），
+  // 默认值写在 globals.css，和改动前的比例完全一致；拖过才落 inline，
+  // 双击分隔条 removeProperty 即还原。偏好持久化在 localStorage。
+  const layoutRef = useRef<HTMLElement | null>(null)
+  const [sideCollapsed, setSideCollapsed] = useState(false)
+
+  useEffect(() => {
+    const el = layoutRef.current
+    if (!el) return
+    try {
+      const saved = JSON.parse(localStorage.getItem('cassia-layout') ?? '{}')
+      if (saved.sideW) el.style.setProperty('--side-w', `${saved.sideW}px`)
+      if (saved.rightW) el.style.setProperty('--right-w', `${saved.rightW}px`)
+      if (saved.collapsed) setSideCollapsed(true)
+    } catch { /* 没存过/存坏了就用默认布局 */ }
+  }, [])
+
+  const persistLayout = useCallback(() => {
+    const el = layoutRef.current
+    if (!el) return
+    const num = (p: string) => parseInt(el.style.getPropertyValue(p)) || undefined
+    try {
+      localStorage.setItem('cassia-layout', JSON.stringify({
+        sideW: num('--side-w'),
+        rightW: num('--right-w'),
+        collapsed: el.classList.contains('side-collapsed'),
+      }))
+    } catch { /* 隐私模式写不进就拉倒，布局照常工作 */ }
+  }, [])
+
+  const toggleSide = useCallback(() => {
+    setSideCollapsed((v) => {
+      const next = !v
+      // 折叠/展开改变了中栏宽度 —— 终端要重新 fit
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+      return next
+    })
+  }, [])
+
+  /** 分隔条拖动。which='side' 拖左栏右缘；'right' 拖中栏右缘（即右栏左缘） */
+  const startDrag = useCallback((which: 'side' | 'right') => {
+    return (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (which === 'side' && sideCollapsed) return
+      e.preventDefault()
+      const el = layoutRef.current
+      if (!el) return
+      const target = e.currentTarget
+      const rect = el.getBoundingClientRect()
+      const prop = which === 'side' ? '--side-w' : '--right-w'
+      const min = which === 'side' ? 180 : 300
+      const max = which === 'side' ? 480 : Math.round(rect.width * 0.75)
+      el.classList.add('dragging')
+      target.setPointerCapture(e.pointerId)
+      let raf = 0
+      let lastFit = 0
+      const onMove = (ev: PointerEvent) => {
+        const w = Math.round(which === 'side' ? ev.clientX - rect.left : rect.right - ev.clientX)
+        const clamped = Math.min(max, Math.max(min, w))
+        if (raf) cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => el.style.setProperty(prop, `${clamped}px`))
+        // xterm 的 fit 跟着 window resize 走 —— 拖动中节流触发
+        const now = Date.now()
+        if (now - lastFit > 120) {
+          lastFit = now
+          window.dispatchEvent(new Event('resize'))
+        }
+      }
+      const onUp = () => {
+        target.removeEventListener('pointermove', onMove)
+        target.removeEventListener('pointerup', onUp)
+        target.removeEventListener('pointercancel', onUp)
+        if (raf) cancelAnimationFrame(raf)
+        el.classList.remove('dragging')
+        window.dispatchEvent(new Event('resize'))
+        persistLayout()
+      }
+      target.addEventListener('pointermove', onMove)
+      target.addEventListener('pointerup', onUp)
+      target.addEventListener('pointercancel', onUp)
+    }
+  }, [sideCollapsed, persistLayout])
+
+  /** 双击分隔条 → 该列恢复默认宽度 */
+  const resetDrag = useCallback((which: 'side' | 'right') => {
+    return () => {
+      layoutRef.current?.style.removeProperty(which === 'side' ? '--side-w' : '--right-w')
+      window.dispatchEvent(new Event('resize'))
+      persistLayout()
+    }
+  }, [persistLayout])
+
+  /** 键盘可调（role=separator）：←→ 每次 16px，Home 还原 */
+  const nudgeDrag = useCallback((which: 'side' | 'right') => {
+    return (e: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home') return
+      e.preventDefault()
+      const el = layoutRef.current
+      if (!el || (which === 'side' && sideCollapsed)) return
+      const prop = which === 'side' ? '--side-w' : '--right-w'
+      if (e.key === 'Home') {
+        el.style.removeProperty(prop)
+      } else {
+        const panel = el.children[which === 'side' ? 0 : 2]
+        const cur = Math.round(panel.getBoundingClientRect().width)
+        const delta = (e.key === 'ArrowRight') === (which === 'side') ? 16 : -16
+        const min = which === 'side' ? 180 : 300
+        const max = which === 'side' ? 480 : Math.round(el.getBoundingClientRect().width * 0.75)
+        el.style.setProperty(prop, `${Math.min(max, Math.max(min, cur + delta))}px`)
+      }
+      window.dispatchEvent(new Event('resize'))
+      persistLayout()
+    }
+  }, [sideCollapsed, persistLayout])
   /** 支付跳回的提示（?checkout=success） */
   const [checkoutToast, setCheckoutToast] = useState(false)
   /** 会话加载失败提示（join ack null —— 后端抖动时不再无声卡住） */
@@ -207,7 +322,10 @@ function Workspace({
   }
 
   return (
-    <main className="layout">
+    <main
+      ref={layoutRef}
+      className={sideCollapsed ? 'layout side-collapsed' : 'layout'}
+    >
       <TaskList
         sessions={os.sessions}
         current={os.sessionId}
@@ -222,7 +340,25 @@ function Workspace({
         balance={os.wallet?.balance}
         sessionCredits={os.sessionCredits}
         onTopUp={() => os.setRechargeOpen(true)}
+        onCollapse={toggleSide}
+        gutter={
+          <button
+            className="gutter"
+            aria-label={t('nav.collapse')}
+            role="separator"
+            aria-orientation="vertical"
+            onPointerDown={startDrag('side')}
+            onDoubleClick={resetDrag('side')}
+            onKeyDown={nudgeDrag('side')}
+          />
+        }
       />
+
+      {sideCollapsed && (
+        <button className="side-expand" onClick={toggleSide} title={t('nav.expand')}>
+          »
+        </button>
+      )}
 
       <div className="panel center">
         <div className="panel-body">
@@ -295,6 +431,15 @@ function Workspace({
             </button>
           </div>
         </div>
+        <button
+          className="gutter"
+          aria-label="Resize panels"
+          role="separator"
+          aria-orientation="vertical"
+          onPointerDown={startDrag('right')}
+          onDoubleClick={resetDrag('right')}
+          onKeyDown={nudgeDrag('right')}
+        />
       </div>
 
       <ComputerPanel
