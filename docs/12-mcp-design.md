@@ -92,6 +92,9 @@ translate.ts 已兜底:toolUsed{tool:'other', detail.other.payload}
 1. `scripts/e2e-mcp.mjs`（打线上:`SOCKET_URL=http://<host> node scripts/e2e-mcp.mjs`）:
    真实会话里要求 agent 调 `sequentialthinking_tools`,断言事件流出现
    `mcp__` 工具调用且成功。测试 server 用 mcp.so 的
-   `mcp-sequentialthinking-tools`(npx 起,无 key)
+   `mcp-sequentialthinking-tools`(npx 起,无 key)。
+   **2026-10-17 线上 PASS**(桌面模板,direct exposure,16.3s 直接调用成功);
+   同轮标准 e2e 回归 PASS。此前两轮 FAIL 分别定位到 `--no-extensions`
+   禁掉内置 MCP、默认 codemode exposure 两处,修复见 git 历史
 2. `PI_TOOLS_ADJUST='-mcp__*'`(负向通配)应能整体关掉 —— 验证 `--no-mcp` 等效路径
 3. chaos 回归不动(MCP 未配置时零影响)
